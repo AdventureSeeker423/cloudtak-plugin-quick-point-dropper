@@ -48,7 +48,10 @@
             v-for='group in groups'
             :key='group.id ?? "unsorted"'
             class='qpd-section-card'
-            :class='{ "qpd-section-over": dragOver === sectionKey(group) }'
+            :class='{
+                "qpd-section-over": dragOver === sectionKey(group),
+                "qpd-section-collapsed": isCollapsed(group)
+            }'
             @dragover='onSectionDragOver(group, $event)'
             @drop.prevent='onSectionDrop(group)'
             @dragleave='onSectionDragLeave(group)'
@@ -58,6 +61,21 @@
                 class='qpd-section-head'
             >
                 <template v-if='state.organizing && group.id'>
+                    <button
+                        class='btn btn-sm btn-ghost-secondary px-1'
+                        type='button'
+                        :title='isCollapsed(group) ? "Expand section" : "Collapse section"'
+                        @click='toggleCollapsed(group)'
+                    >
+                        <IconChevronRight
+                            v-if='isCollapsed(group)'
+                            :size='16'
+                        />
+                        <IconChevronDown
+                            v-else
+                            :size='16'
+                        />
+                    </button>
                     <button
                         class='btn btn-sm btn-ghost-secondary px-1'
                         type='button'
@@ -109,20 +127,33 @@
                         />
                     </button>
                 </template>
-                <span
+                <button
                     v-else
-                    class='qpd-section-title'
-                >{{ group.name }}</span>
+                    class='qpd-section-title-btn qpd-section-toggle'
+                    type='button'
+                    :title='isCollapsed(group) ? "Expand section" : "Collapse section"'
+                    @click='toggleCollapsed(group)'
+                >
+                    <IconChevronRight
+                        v-if='isCollapsed(group)'
+                        :size='16'
+                    />
+                    <IconChevronDown
+                        v-else
+                        :size='16'
+                    />
+                    {{ group.name }}
+                </button>
             </div>
 
             <div
-                v-if='state.organizing && !group.icons.length'
+                v-if='!isCollapsed(group) && state.organizing && !group.icons.length'
                 class='qpd-empty-drop'
             >
                 Drag icons here
             </div>
             <div
-                v-else
+                v-else-if='!isCollapsed(group)'
                 :class='iconListClass'
             >
                 <div
@@ -246,6 +277,7 @@ import {
     IconTrash,
     IconChevronUp,
     IconChevronDown,
+    IconChevronRight,
     IconGripVertical,
 } from '@tabler/icons-vue';
 import {
@@ -271,6 +303,38 @@ const renamingId = ref<string | null>(null);
 const renameValue = ref('');
 const dragOver = ref('');
 let dragging: DisplayIcon | null = null;
+
+const LS_COLLAPSED = 'cloudtak-qpd-collapsedSections';
+const collapsedIds = ref<string[]>(loadCollapsed());
+
+function loadCollapsed(): string[] {
+    try {
+        const raw = localStorage.getItem(LS_COLLAPSED);
+        const parsed = raw ? JSON.parse(raw) as unknown : [];
+        return Array.isArray(parsed)
+            ? parsed.filter((id): id is string => typeof id === 'string')
+            : [];
+    } catch {
+        return [];
+    }
+}
+
+function collapseKey(group: FavoriteGroup): string {
+    return group.id ?? 'unsorted';
+}
+
+function isCollapsed(group: FavoriteGroup): boolean {
+    return collapsedIds.value.includes(collapseKey(group));
+}
+
+function toggleCollapsed(group: FavoriteGroup): void {
+    const key = collapseKey(group);
+    const next = collapsedIds.value.includes(key)
+        ? collapsedIds.value.filter((id) => id !== key)
+        : [...collapsedIds.value, key];
+    collapsedIds.value = next;
+    try { localStorage.setItem(LS_COLLAPSED, JSON.stringify(next)); } catch { /* ignore */ }
+}
 
 const groups = computed(() => favoriteGroups());
 const sections = computed(() => sortedSections());
@@ -439,6 +503,17 @@ function onSectionDrop(group: FavoriteGroup): void {
 .qpd-section-title-btn:hover {
     background: rgba(255, 255, 255, 0.06);
     color: inherit;
+}
+.qpd-section-collapsed .qpd-section-head {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: 0;
+}
+.qpd-section-title-btn.qpd-section-toggle {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
 }
 .qpd-rename {
     min-width: 0;

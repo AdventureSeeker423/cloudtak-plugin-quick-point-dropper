@@ -170,6 +170,43 @@
             class='mb-2'
         >
             <label class='form-label small mb-1'>Title / Callsign</label>
+            <div class='qpd-enum-row mb-1'>
+                <div class='form-check form-switch mb-0'>
+                    <input
+                        id='qpd-enumerate'
+                        class='form-check-input'
+                        type='checkbox'
+                        :checked='state.enumerate'
+                        @change='onEnumerateToggle'
+                    >
+                    <label
+                        class='form-check-label small text-nowrap'
+                        for='qpd-enumerate'
+                    >Enumerate Points</label>
+                </div>
+                <input
+                    class='form-control form-control-sm qpd-enum-num'
+                    type='number'
+                    min='0'
+                    step='1'
+                    :value='state.enumerateNext'
+                    title='Next number'
+                    aria-label='Next number'
+                    @input='onEnumerateInput'
+                    @blur='onEnumerateBlur'
+                >
+                <button
+                    class='btn btn-sm btn-outline-secondary px-2'
+                    type='button'
+                    title='Reset to 1'
+                    aria-label='Reset to 1'
+                    @click='resetEnumerate'
+                >
+                    <IconRotate
+                        :size='16'
+                    />
+                </button>
+            </div>
             <div class='input-group input-group-sm'>
                 <input
                     ref='titleInput'
@@ -208,13 +245,27 @@
             v-show='!state.organizing'
             class='mb-2'
         >
-            <input
-                v-model='state.query'
-                class='form-control form-control-sm'
-                type='search'
-                placeholder='Search icons'
-                aria-label='Search icons'
-            >
+            <div class='input-group input-group-sm'>
+                <input
+                    v-model='state.query'
+                    class='form-control'
+                    type='search'
+                    placeholder='Search icons'
+                    aria-label='Search icons'
+                >
+                <button
+                    type='button'
+                    class='btn btn-outline-secondary'
+                    :disabled='!state.query'
+                    title='Clear search'
+                    aria-label='Clear search'
+                    @click='state.query = ""'
+                >
+                    <IconX
+                        :size='16'
+                    />
+                </button>
+            </div>
         </div>
 
         <div
@@ -282,6 +333,7 @@ import {
     IconAdjustments,
     IconArrowsMove,
     IconX,
+    IconRotate,
 } from '@tabler/icons-vue';
 import FavoritesBoard from './FavoritesBoard.vue';
 import FavoritesEditor from './FavoritesEditor.vue';
@@ -310,6 +362,10 @@ import {
     defaultCallsign,
     iconLabel,
     bindTitleInput,
+    setEnumerate,
+    setEnumerateNext,
+    resetEnumerate,
+    enumeratedCallsign,
 } from './dropper.ts';
 
 defineProps<{
@@ -323,7 +379,11 @@ const sections = computed(() => sortedSections());
 const sectionSelectVisible = computed(() => showSectionSelect());
 const unsortedFavorites = computed(() => hasUnsortedFavorites());
 const icons = computed(() => visibleIcons());
-const titlePreview = computed(() => defaultCallsign(state.selected) || 'Point');
+const titlePreview = computed(() => {
+    const stem = defaultCallsign(state.selected) || 'Point';
+    if (!state.enumerate) return stem;
+    return enumeratedCallsign(stem);
+});
 const confirmDelete = ref(false);
 const titleInput = ref<HTMLInputElement | null>(null);
 
@@ -353,6 +413,32 @@ function onDeleteClick(): void {
     void deletePoint();
 }
 
+function onEnumerateToggle(ev: Event): void {
+    setEnumerate((ev.target as HTMLInputElement).checked);
+}
+
+function onEnumerateInput(ev: Event): void {
+    const el = ev.target as HTMLInputElement;
+    if (el.value.trim() === '') return;
+    const n = Number(el.value);
+    if (!Number.isFinite(n) || n < 0) {
+        setEnumerateNext(0);
+        el.value = '0';
+        return;
+    }
+    setEnumerateNext(n);
+}
+
+function onEnumerateBlur(ev: Event): void {
+    const el = ev.target as HTMLInputElement;
+    if (el.value.trim() === '') {
+        setEnumerateNext(0);
+        el.value = '0';
+    } else {
+        el.value = String(state.enumerateNext);
+    }
+}
+
 function onPackChange(ev: Event): void {
     const value = (ev.target as HTMLSelectElement).value;
     void selectPack(value);
@@ -368,6 +454,24 @@ function onSectionChange(ev: Event): void {
 </script>
 
 <style scoped>
+.qpd-enum-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.qpd-enum-num {
+    width: 3.25rem;
+    flex: 0 0 3.25rem;
+    padding-left: 4px;
+    padding-right: 4px;
+    text-align: center;
+    -moz-appearance: textfield;
+}
+.qpd-enum-num::-webkit-outer-spin-button,
+.qpd-enum-num::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
 .qpd-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));

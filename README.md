@@ -9,10 +9,12 @@ Drop CoT points onto the CloudTAK map from any icon pack. Pick an icon, fill Tit
 - Shared Favorites pack, persisted in CloudTAK Postgres (`qpd_favorites` + `qpd_sections`)
 - Admin-curated **sections** and custom order (arrows or drag) via Organize
 - Star overlays visible only to CloudTAK **system admins** (`AuthUserAccess.ADMIN` / `profile.system_admin`)
-- Drop mode: crosshair cursor, every map click creates a new CoT (`u-d-p`) even on top of an existing point
+- Drop mode: crosshair cursor, every map click creates a new CoT even on top of an existing point
+- Stacked points use CloudTAK’s built-in picker; the radial menu stays closed while this plugin is open
 - Bottom-bar **Stop Dropping Points** widget while dropping
 - With drop mode off and the panel open, click any CoT to load Title / Callsign, Notes / Remarks, and icon; changes save immediately
 - **Move** relocates a selected point: click the map once to place it
+- **Enumerate Points** appends a running number to each dropped callsign (starts at 1, 0 allowed)
 - Empty Title / Callsign uses the icon’s name with each word capitalized; Notes / Remarks go to `properties.remarks` when filled
 
 ## Requirements
@@ -83,10 +85,10 @@ Restart the CloudTAK API so it loads `plugin-qpd.ts`, and restart `npm run serve
 
 1. Open **Quick Point Dropper** from the right-side menu.
 2. Choose **Favorites**, **Standard**, or an icon pack. Toggle the grid button for icon names. Use the search box to filter icons.
-3. The Title / Callsign box previews the selected icon’s name as placeholder text. Type to override it, or tap another icon to replace that default. Use the X to clear a custom title. Notes / Remarks persist across drops.
+3. The Title / Callsign box previews the selected icon’s name as placeholder text. Type to override it, or tap another icon to replace that default. Use the X to clear a custom title. Turn on **Enumerate Points** to append a counter (space + number) on each drop; set the next number or reset it to 1. Notes / Remarks persist across drops.
 4. Tap an icon — the cursor becomes a crosshair. Every map click drops a new point.
-5. Tap **Stop Dropping Points** in the bottom bar or **Escape** to leave drop mode. **Clear Selection** (top right) clears Title / Callsign, Notes / Remarks, and the selected icon.
-6. With drop mode off, click any point on the map to load it. Title / Callsign, Notes / Remarks, and icon changes save immediately. **Move** (left of Delete) then a map click relocates that point. **Delete** then **Confirm Deletion** removes it. Click empty map or press **Escape** to deselect. Click an icon to start dropping again.
+5. Tap **Stop Dropping Points** in the bottom bar to leave drop mode, or **Escape** to stop dropping and also clear Title / Callsign, Notes / Remarks, and the selected icon. **Clear Selection** (top right) does the same clear.
+6. With drop mode off, click any point on the map to load it. Overlapping points open CloudTAK’s selection list; picking one loads it here and does not open the radial. Title / Callsign, Notes / Remarks, and icon changes save immediately. **Move** (left of Delete) then a map click relocates that point. **Delete** then **Confirm Deletion** removes it. Click empty map or press **Escape** to deselect. Click an icon to start dropping again.
 7. System admins tap **Edit Favorites** to add or remove icons and to arrange sections. Everyday dropping never stars or unstars by accident.
 8. In the editor, **Add icons** toggles membership from any pack; **Arrange** is for named sections, drag-reorder, and remove. Starred icons with no section sit under **Unsorted**.
 

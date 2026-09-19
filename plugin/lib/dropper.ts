@@ -6,6 +6,7 @@ import { reactive, watch, nextTick } from 'vue';
 import type { PluginAPI } from '@tak-ps/cloudtak';
 import { normalize_geojson } from '@tak-ps/node-cot/normalize_geojson';
 import { useMapStore } from '../../../src/stores/map.ts';
+import OverlayManager from '../../../src/base/overlay.ts';
 import IconsetManager from '../../../src/base/iconset.ts';
 import Icon from '../../../src/base/icon.ts';
 import {
@@ -89,6 +90,8 @@ export const state = reactive({
     selected: null as DisplayIcon | null,
     editing: null as EditingPoint | null,
     moving: false,
+    enumerate: false,
+    enumerateNext: 1,
 });
 
 function loadDetailed(): boolean {
@@ -142,6 +145,33 @@ export function iconLabel(icon: { name?: string; path?: string }): string {
 export function defaultCallsign(icon?: DisplayIcon | null): string {
     if (!icon) return '';
     return iconLabel(icon) || 'Point';
+}
+
+export function enumeratedCallsign(stem: string): string {
+    const raw = state.title;
+    const base = raw.trim() ? raw : stem;
+    const prefix = base.endsWith(' ') ? base : `${base} `;
+    return `${prefix}${state.enumerateNext}`;
+}
+
+export function setEnumerate(value: boolean): void {
+    state.enumerate = !!value;
+}
+
+export function setEnumerateNext(value: number): void {
+    if (!Number.isFinite(value)) {
+        state.enumerateNext = 0;
+        return;
+    }
+    state.enumerateNext = Math.max(0, Math.floor(value));
+}
+
+export function resetEnumerate(): void {
+    state.enumerateNext = 1;
+}
+
+export function bumpEnumerate(): void {
+    state.enumerateNext += 1;
 }
 
 function remarksText(raw: unknown): string {
@@ -497,6 +527,7 @@ const thumbUrls: string[] = [];
 const libraryThumbs: string[] = [];
 let onDroppingChange: ((dropping: boolean) => void) | null = null;
 let removeAfterEach: (() => void) | undefined;
+let stopMapStoreWatch: (() => void) | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let suppressSave = false;
 let preEdit: { title: string; remarks: string } | null = null;
@@ -611,7 +642,7 @@ const onKeyDown = (e: KeyboardEvent): void => {
     if (!state.dropping) return;
     e.preventDefault();
     e.stopPropagation();
-    stopDrop();
+    clearSelection();
 };
 
 export function setDroppingListener(fn: ((dropping: boolean) => void) | null): void {
@@ -698,9 +729,59 @@ const onMapMouseMove = (): void => {
 function clearRadial(): void {
     if (!api) return;
     try {
-        const mapStore = useMapStore(api.pinia) as { radial?: { mode?: unknown } };
-        if (mapStore.radial) mapStore.radial.mode = undefined;
+        const mapStore = useMapStore(api.pinia) as {
+            radial?: { mode?: unknown; cot?: unknown };
+        };
+        if (mapStore.radial) {
+            mapStore.radial.mode = undefined;
+            mapStore.radial.cot = undefined;
+        }
     } catch { /* ignore */ }
+}
+
+function clearSelectMenu(): void {
+    if (!api) return;
+    try {
+        const mapStore = useMapStore(api.pinia) as { select?: { feats?: unknown[] } };
+        if (mapStore.select?.feats?.length) mapStore.select.feats = [];
+    } catch { /* ignore */ }
+}
+
+function suppressCloudtakUi(): void {
+    clearRadial();
+    clearSelectMenu();
+}
+
+type MapStoreUi = {
+    radial: {
+        mode?: string;
+        cot?: { id?: string; properties?: { id?: string } };
+    };
+    select: { feats: unknown[] };
+};
+
+function bindMapStoreWatch(): void {
+    stopMapStoreWatch?.();
+    stopMapStoreWatch = undefined;
+    if (!api) return;
+    const mapStore = useMapStore(api.pinia) as MapStoreUi;
+    stopMapStoreWatch = watch(
+        () => [mapStore.radial.mode, mapStore.select.feats?.length ?? 0] as const,
+        ([mode, featCount]) => {
+            if (!pluginRouteActive() || state.organizing) return;
+            if (dropCursorActive()) {
+                if (mode) clearRadial();
+                if (featCount) clearSelectMenu();
+                return;
+            }
+            if (!mode || mode === 'context') return;
+            if (mode !== 'cot') return;
+            const cot = mapStore.radial.cot;
+            const id = String(cot?.properties?.id || cot?.id || '');
+            clearRadial();
+            if (id) void beginEdit(id);
+        }
+    );
 }
 
 function pluginRouteActive(): boolean {
@@ -785,25 +866,36 @@ export async function deletePoint(): Promise<void> {
     }
 }
 
-function cotUidFromClick(point: { x: number; y: number }): string | undefined {
-    if (!api) return undefined;
+function uniqueClickIds(point: { x: number; y: number }): string[] {
+    if (!api) return [];
     const hits = api.map.queryRenderedFeatures([point.x, point.y]);
+    let clickMap: Map<string, { type: string }> | undefined;
+    try {
+        clickMap = OverlayManager.clickableLayerMap();
+    } catch { /* overlay manager not ready */ }
+    const seen = new Set<string>();
+    const ids: string[] = [];
     for (const f of hits) {
-        const source = String(f.source || '');
         const layer = String(f.layer?.id || '');
+        if (clickMap && clickMap.size > 0 && !clickMap.has(layer)) continue;
         const props = (f.properties || {}) as Record<string, unknown>;
         const id = props.id ?? props.uid ?? f.id;
-        if (typeof id !== 'string' || !id) continue;
-        if (
-            source.includes('cot')
-            || layer.toLowerCase().includes('cot')
-            || props.callsign !== undefined
-            || props.type !== undefined
-        ) {
-            return id;
+        if (typeof id !== 'string' || !id || seen.has(id)) continue;
+        if (!clickMap || clickMap.size === 0) {
+            const source = String(f.source || '');
+            if (
+                !source.includes('cot')
+                && !layer.toLowerCase().includes('cot')
+                && props.callsign === undefined
+                && props.type === undefined
+            ) {
+                continue;
+            }
         }
+        seen.add(id);
+        ids.push(id);
     }
-    return undefined;
+    return ids;
 }
 
 async function getFeature(uid: string): Promise<{
@@ -821,14 +913,21 @@ async function getFeature(uid: string): Promise<{
     }) ?? null;
 }
 
-async function upsertCot(opts: { id: string; lng: number; lat: number; icon?: string }): Promise<void> {
+async function upsertCot(opts: {
+    id: string;
+    lng: number;
+    lat: number;
+    icon?: string;
+    enumerate?: boolean;
+}): Promise<void> {
     if (!api) return;
     const selected = state.selected;
     const cotType = selected?.cotType;
     const icon = selected && !cotType ? selected.key : (!cotType ? opts.icon : undefined);
     if (!cotType && !icon) return;
     const mapStore = useMapStore(api.pinia);
-    const callsign = state.title.trim() || defaultCallsign(selected) || 'Point';
+    const stem = state.title.trim() || defaultCallsign(selected) || 'Point';
+    const callsign = opts.enumerate ? enumeratedCallsign(stem) : stem;
     const remarks = remarksText(state.remarks);
 
     const feat = {
@@ -859,6 +958,7 @@ async function upsertCot(opts: { id: string; lng: number; lat: number; icon?: st
         norm.properties.icon = icon;
     }
     await mapStore.worker.db.add(JSON.parse(JSON.stringify(norm)), { authored: true });
+    if (opts.enumerate) bumpEnumerate();
 }
 
 async function beginEdit(uid: string): Promise<void> {
@@ -932,27 +1032,37 @@ const onMapClick = (e: MapClickEvent): void => {
         }).catch((err) => {
             state.error = err instanceof Error ? err.message : String(err);
         });
-        clearRadial();
+        suppressCloudtakUi();
         return;
     }
 
     if (state.dropping) {
         if (!state.selected) return;
         const id = crypto.randomUUID();
-        void upsertCot({ id, lng: e.lngLat.lng, lat: e.lngLat.lat }).then(() => {
+        void upsertCot({
+            id,
+            lng: e.lngLat.lng,
+            lat: e.lngLat.lat,
+            enumerate: state.enumerate,
+        }).then(() => {
             applyDropCursor();
             requestAnimationFrame(applyDropCursor);
+            suppressCloudtakUi();
         }).catch((err) => {
             state.error = err instanceof Error ? err.message : String(err);
         });
-        clearRadial();
+        suppressCloudtakUi();
         applyDropCursor();
         return;
     }
 
-    const uid = cotUidFromClick(e.point);
-    if (uid) {
-        void beginEdit(uid);
+    const ids = uniqueClickIds(e.point);
+    if (ids.length > 1) {
+        clearRadial();
+        return;
+    }
+    if (ids.length === 1) {
+        void beginEdit(ids[0]);
         clearRadial();
         return;
     }
@@ -1174,6 +1284,8 @@ export function init(pluginAPI: PluginAPI): void {
         window.removeEventListener('keydown', onKeyDown, true);
         removeAfterEach?.();
         removeAfterEach = undefined;
+        stopMapStoreWatch?.();
+        stopMapStoreWatch = undefined;
     }
 
     api = pluginAPI;
@@ -1184,6 +1296,8 @@ export function init(pluginAPI: PluginAPI): void {
     } catch (err) {
         console.warn('QPD: map click handler not attached yet', err);
     }
+
+    bindMapStoreWatch();
 
     window.addEventListener('keydown', onKeyDown, true);
 
@@ -1211,6 +1325,8 @@ export function destroy(): void {
     titleInputEl = null;
     removeAfterEach?.();
     removeAfterEach = undefined;
+    stopMapStoreWatch?.();
+    stopMapStoreWatch = undefined;
     try { api?.map.off('click', onMapClick as never); } catch { /* map not ready */ }
     try { api?.map.off('mousemove', onMapMouseMove as never); } catch { /* map not ready */ }
     window.removeEventListener('keydown', onKeyDown, true);
