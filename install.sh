@@ -15,18 +15,18 @@
 #   • rebuild + restart the CloudTAK API image so both are baked in.
 #
 # Usage:
-#   Install:  ./install.sh [/path/to/CloudTAK]
-#   Update:   ./install.sh --pull [/path/to/CloudTAK]
-#   Remove:   ./install.sh --remove [/path/to/CloudTAK]
+#   Install / update:  ./install.sh [/path/to/CloudTAK]
+#   Remove:            ./install.sh --remove [/path/to/CloudTAK]
 #
 # Options:
 #   /path/to/CloudTAK   CloudTAK checkout (the dir containing docker-compose.yml).
 #                       Defaults to ~/CloudTAK.
-#   --pull              git pull this plugin repo first.
+#   --no-pull           Skip git pull (deploy whatever is already in this checkout).
+#   --pull              No-op; pull is the default on install/update.
 #   --no-build          Copy/remove files only; skip the docker rebuild + restart.
 #   --remove            Uninstall: delete the copied files, then rebuild.
 #
-# Requires: bash; git (only for --pull); and (unless --no-build) docker + docker compose.
+# Requires: bash; git (unless --no-pull or --remove); and (unless --no-build) docker + docker compose.
 
 set -euo pipefail
 
@@ -40,11 +40,12 @@ usage() {
 
 CT_DIR=""
 DO_BUILD=1
-DO_PULL=0
+DO_PULL=1
 ACTION="install"
 for arg in "$@"; do
     case "$arg" in
         --pull) DO_PULL=1 ;;
+        --no-pull) DO_PULL=0 ;;
         --no-build) DO_BUILD=0 ;;
         --remove) ACTION="remove" ;;
         -h|--help) usage; exit 0 ;;
@@ -82,14 +83,19 @@ echo "Plugin:   $REPO_DIR"
 echo "Action:   $ACTION"
 echo
 
+if [ "$ACTION" = "remove" ]; then
+    DO_PULL=0
+fi
+
 if [ "$DO_PULL" -eq 1 ]; then
     if [ ! -d "$REPO_DIR/.git" ]; then
-        echo "ERROR: --pull given but $REPO_DIR is not a git checkout." >&2
-        exit 1
+        echo "Skipping git pull (not a git checkout)."
+        echo
+    else
+        echo "Pulling latest plugin source..."
+        git -C "$REPO_DIR" pull
+        echo
     fi
-    echo "Pulling latest plugin source..."
-    git -C "$REPO_DIR" pull
-    echo
 fi
 
 if [ "$ACTION" = "remove" ]; then

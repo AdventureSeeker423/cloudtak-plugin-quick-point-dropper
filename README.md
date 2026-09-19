@@ -22,7 +22,7 @@ CloudTAK’s `WEB_PLUGINS` build arg **cannot** install this plugin: it only clo
 
 These commands assume CloudTAK lives at `~/CloudTAK` (the `install.sh` default). If yours is elsewhere, change that path.
 
-### Install
+### Install / update
 
 ```bash
 git clone https://github.com/AdventureSeeker423/cloudtak-plugin-quick-point-dropper.git
@@ -30,18 +30,17 @@ cd cloudtak-plugin-quick-point-dropper
 ./install.sh ~/CloudTAK
 ```
 
-That copies:
+That `git pull`s this repo, then copies:
 
 - `plugin/` → `~/CloudTAK/api/web/plugins/quick-point-dropper/`
 - `server/plugin-qpd.ts` → `~/CloudTAK/api/stateless/routes/`
 
-then rebuilds and recreates the CloudTAK API image (5–15 minutes).
+and rebuilds and recreates the CloudTAK API image (5–15 minutes). Run the same `./install.sh ~/CloudTAK` command to update later.
 
-### Update
+To deploy whatever is already in this checkout without pulling:
 
 ```bash
-cd cloudtak-plugin-quick-point-dropper
-./install.sh --pull ~/CloudTAK
+./install.sh --no-pull ~/CloudTAK
 ```
 
 ### Remove
