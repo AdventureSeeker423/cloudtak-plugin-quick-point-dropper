@@ -462,8 +462,8 @@ function iconKey(iconset: string, path: string): string {
 }
 
 let api: PluginAPI | null = null;
-let thumbUrls: string[] = [];
-let libraryThumbs: string[] = [];
+const thumbUrls: string[] = [];
+const libraryThumbs: string[] = [];
 let onDroppingChange: ((dropping: boolean) => void) | null = null;
 let removeAfterEach: (() => void) | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
