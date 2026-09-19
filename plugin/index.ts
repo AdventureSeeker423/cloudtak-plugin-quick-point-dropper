@@ -35,7 +35,7 @@ export default class QuickPointDropper implements PluginInstance {
             path: 'plugin-quick-point-dropper',
             name: ROUTE_NAME,
             component: {
-                render: () => h(MenuTemplate, { name: 'Quick Point Dropper' }, {
+                render: () => h(MenuTemplate, { name: 'Quick Point Dropper', back: false }, {
                     default: () => h(DropperContainer, { api: this.api })
                 })
             }
