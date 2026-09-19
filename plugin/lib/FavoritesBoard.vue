@@ -209,8 +209,8 @@
                             @click.stop='moveIcon(icon, -1)'
                         >
                             <IconChevronUp
-                            :size='16'
-                        />
+                                :size='16'
+                            />
                         </button>
                         <button
                             class='btn btn-sm btn-ghost-secondary px-1'
@@ -220,8 +220,8 @@
                             @click.stop='moveIcon(icon, 1)'
                         >
                             <IconChevronDown
-                            :size='16'
-                        />
+                                :size='16'
+                            />
                         </button>
                     </div>
                 </div>
