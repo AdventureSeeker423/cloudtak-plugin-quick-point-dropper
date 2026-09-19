@@ -48,23 +48,6 @@
         </div>
 
         <div
-            v-if='state.dropping && state.selected && !state.organizing'
-            class='alert alert-info d-flex align-items-center justify-content-between py-2 px-3 mb-2 sticky-top'
-            role='status'
-        >
-            <span class='small'>
-                Dropping <strong>{{ state.selected.name }}</strong> — click the map to place points
-            </span>
-            <button
-                class='btn btn-sm btn-dark'
-                type='button'
-                @click='stopDrop'
-            >
-                Stop
-            </button>
-        </div>
-
-        <div
             v-if='state.error'
             class='alert alert-danger py-2 px-3 mb-2 small'
             role='alert'
@@ -189,6 +172,7 @@
             <label class='form-label small mb-1'>Title / Callsign</label>
             <div class='input-group input-group-sm'>
                 <input
+                    ref='titleInput'
                     v-model='state.title'
                     class='form-control'
                     type='text'
@@ -217,7 +201,6 @@
                 v-model='state.remarks'
                 class='form-control form-control-sm'
                 rows='2'
-                placeholder='Optional remarks'
             />
         </div>
 
@@ -291,7 +274,7 @@
 </template>
 
 <script setup lang='ts'>
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
     IconLayoutGrid,
     IconListDetails,
@@ -312,7 +295,6 @@ import {
     selectFolder,
     selectSection,
     selectIcon,
-    stopDrop,
     stopMove,
     toggleMove,
     deletePoint,
@@ -327,6 +309,7 @@ import {
     visibleIcons,
     defaultCallsign,
     iconLabel,
+    bindTitleInput,
 } from './dropper.ts';
 
 defineProps<{
@@ -342,6 +325,15 @@ const unsortedFavorites = computed(() => hasUnsortedFavorites());
 const icons = computed(() => visibleIcons());
 const titlePreview = computed(() => defaultCallsign(state.selected) || 'Point');
 const confirmDelete = ref(false);
+const titleInput = ref<HTMLInputElement | null>(null);
+
+watch(titleInput, (el) => {
+    bindTitleInput(el);
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+    bindTitleInput(null);
+});
 
 watch(() => state.editing?.id, () => {
     confirmDelete.value = false;

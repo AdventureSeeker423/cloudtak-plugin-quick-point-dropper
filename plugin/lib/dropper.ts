@@ -2,7 +2,7 @@
  * Quick Point Dropper — shared reactive state, map click handling,
  * CoT create/update, and server-backed favorites.
  */
-import { reactive, watch } from 'vue';
+import { reactive, watch, nextTick } from 'vue';
 import type { PluginAPI } from '@tak-ps/cloudtak';
 import { normalize_geojson } from '@tak-ps/node-cot/normalize_geojson';
 import { useMapStore } from '../../../src/stores/map.ts';
@@ -142,6 +142,12 @@ export function iconLabel(icon: { name?: string; path?: string }): string {
 export function defaultCallsign(icon?: DisplayIcon | null): string {
     if (!icon) return '';
     return iconLabel(icon) || 'Point';
+}
+
+function remarksText(raw: unknown): string {
+    const text = String(raw ?? '').trim();
+    if (!text || /^none$/i.test(text)) return '';
+    return text;
 }
 
 /** Top-level folder in an icon path, or '' when the icon sits at the pack root. */
@@ -494,6 +500,18 @@ let removeAfterEach: (() => void) | undefined;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let suppressSave = false;
 let preEdit: { title: string; remarks: string } | null = null;
+let titleInputEl: HTMLInputElement | null = null;
+
+export function bindTitleInput(el: HTMLInputElement | null): void {
+    titleInputEl = el;
+}
+
+function focusTitleInput(): void {
+    if (!titleInputEl || state.organizing) return;
+    void nextTick(() => {
+        titleInputEl?.focus({ preventScroll: true });
+    });
+}
 
 function clearSaveTimer(): void {
     if (saveTimer) {
@@ -733,6 +751,7 @@ export function selectIcon(icon: DisplayIcon): void {
         });
     }
     startDrop();
+    focusTitleInput();
 }
 
 export async function deletePoint(): Promise<void> {
@@ -794,7 +813,7 @@ async function upsertCot(opts: { id: string; lng: number; lat: number; icon?: st
     if (!cotType && !icon) return;
     const mapStore = useMapStore(api.pinia);
     const callsign = state.title.trim() || defaultCallsign(selected) || 'Point';
-    const remarks = state.remarks.trim();
+    const remarks = remarksText(state.remarks);
 
     const feat = {
         id: opts.id,
@@ -802,7 +821,7 @@ async function upsertCot(opts: { id: string; lng: number; lat: number; icon?: st
         path: '/',
         properties: {
             callsign,
-            ...(remarks ? { remarks } : {}),
+            remarks,
         },
         geometry: {
             type: 'Point' as const,
@@ -814,6 +833,7 @@ async function upsertCot(opts: { id: string; lng: number; lat: number; icon?: st
     const norm: any = await normalize_geojson(feat as any);
     norm.properties.how = 'h-g-i-g-o';
     norm.properties.archived = true;
+    norm.properties.remarks = remarks;
     if (cotType) {
         norm.properties.type = selected?.legacyType || cotType;
         norm.properties['marker-opacity'] = 1;
@@ -843,7 +863,7 @@ async function beginEdit(uid: string): Promise<void> {
     snapshotPreEdit();
     suppressSave = true;
     state.title = String(props.callsign || '');
-    state.remarks = String(props.remarks || '');
+    state.remarks = remarksText(props.remarks);
     const icon = typeof props.icon === 'string' ? props.icon : '';
     const cotType = typeof props.type === 'string' ? props.type : '';
     state.editing = {
@@ -1172,6 +1192,7 @@ export function destroy(): void {
     stopMove();
     state.editing = null;
     preEdit = null;
+    titleInputEl = null;
     removeAfterEach?.();
     removeAfterEach = undefined;
     try { api?.map.off('click', onMapClick as never); } catch { /* map not ready */ }
