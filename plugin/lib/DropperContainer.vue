@@ -8,7 +8,11 @@
             <span class='small'>
                 Dropping <strong>{{ state.selected.name }}</strong> — click the map to place points
             </span>
-            <button class='btn btn-sm btn-dark' type='button' @click='stopDrop'>
+            <button
+                class='btn btn-sm btn-dark'
+                type='button'
+                @click='stopDrop'
+            >
                 Stop
             </button>
         </div>
@@ -20,10 +24,18 @@
         >
             <span class='small'>Editing existing point</span>
             <span class='btn-list'>
-                <button class='btn btn-sm btn-primary' type='button' @click='updatePoint'>
+                <button
+                    class='btn btn-sm btn-primary'
+                    type='button'
+                    @click='updatePoint'
+                >
                     Update Point
                 </button>
-                <button class='btn btn-sm btn-outline-secondary' type='button' @click='cancelEdit'>
+                <button
+                    class='btn btn-sm btn-outline-secondary'
+                    type='button'
+                    @click='cancelEdit'
+                >
                     Cancel
                 </button>
             </span>
@@ -49,7 +61,9 @@
                 :value='state.selectedPack'
                 @change='onPackChange'
             >
-                <option :value='FAVORITES_PACK'>Favorites</option>
+                <option :value='FAVORITES_PACK'>
+                    Favorites
+                </option>
                 <option
                     v-for='pack in state.packs'
                     :key='pack.uid'
@@ -64,8 +78,14 @@
                 :title='state.detailed ? "Compact grid" : "Show icon names"'
                 @click='setDetailed(!state.detailed)'
             >
-                <IconListDetails v-if='!state.detailed' :size='18' />
-                <IconLayoutGrid v-else :size='18' />
+                <IconListDetails
+                    v-if='!state.detailed'
+                    :size='18'
+                />
+                <IconLayoutGrid
+                    v-else
+                    :size='18'
+                />
             </button>
         </div>
 
@@ -76,7 +96,7 @@
                 class='form-control form-control-sm'
                 type='text'
                 placeholder='Icon name if empty'
-            />
+            >
         </div>
         <div class='mb-3'>
             <label class='form-label small mb-1'>Remarks</label>
@@ -88,7 +108,10 @@
             />
         </div>
 
-        <div v-if='state.loading' class='text-secondary small py-3 text-center'>
+        <div
+            v-if='state.loading'
+            class='text-secondary small py-3 text-center'
+        >
             Loading icons…
         </div>
         <div
@@ -119,8 +142,15 @@
                 @click='selectIcon(icon)'
             >
                 <span class='qpd-icon-thumb'>
-                    <img v-if='icon.url' :src='icon.url' :alt='icon.name' />
-                    <span v-else class='qpd-icon-missing'>?</span>
+                    <img
+                        v-if='icon.url'
+                        :src='icon.url'
+                        :alt='icon.name'
+                    >
+                    <span
+                        v-else
+                        class='qpd-icon-missing'
+                    >?</span>
                     <span
                         v-if='state.writable'
                         class='qpd-star'
@@ -128,11 +158,20 @@
                         title='Toggle favorite'
                         @click.stop='toggleFavorite(icon)'
                     >
-                        <IconStarFilled v-if='isFavorite(icon)' :size='14' />
-                        <IconStar v-else :size='14' />
+                        <IconStarFilled
+                            v-if='isFavorite(icon)'
+                            :size='14'
+                        />
+                        <IconStar
+                            v-else
+                            :size='14'
+                        />
                     </span>
                 </span>
-                <span v-if='state.detailed' class='qpd-icon-label'>{{ icon.name }}</span>
+                <span
+                    v-if='state.detailed'
+                    class='qpd-icon-label'
+                >{{ icon.name }}</span>
             </button>
         </div>
     </div>

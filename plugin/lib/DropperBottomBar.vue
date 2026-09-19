@@ -9,7 +9,7 @@
             width='28'
             height='28'
             style='opacity: 0.95;'
-        />
+        >
         <span class='small text-white ps-1 text-nowrap'>
             Stop
         </span>

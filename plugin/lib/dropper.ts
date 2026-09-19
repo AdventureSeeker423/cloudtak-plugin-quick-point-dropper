@@ -161,7 +161,7 @@ export function cancelEdit(): void {
 
 function cotUidFromClick(point: { x: number; y: number }): string | undefined {
     if (!api) return undefined;
-    const hits = api.map.queryRenderedFeatures(point);
+    const hits = api.map.queryRenderedFeatures([point.x, point.y]);
     for (const f of hits) {
         const source = String(f.source || '');
         const layer = String(f.layer?.id || '');
