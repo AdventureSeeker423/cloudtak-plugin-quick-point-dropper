@@ -18,6 +18,18 @@
             </button>
             <button
                 class='btn btn-sm w-100'
+                :class='state.changingIcon ? "btn-primary" : "btn-outline-secondary"'
+                type='button'
+                @click='onChangeIconClick'
+            >
+                <IconReplace
+                    :size='16'
+                    class='me-1'
+                />
+                Change Icon
+            </button>
+            <button
+                class='btn btn-sm w-100'
                 :class='confirmDelete ? "btn-danger" : "btn-outline-danger"'
                 type='button'
                 @click='onDeleteClick'
@@ -42,6 +54,23 @@
                 class='btn btn-sm btn-dark'
                 type='button'
                 @click='stopMove'
+            >
+                Cancel
+            </button>
+        </div>
+
+        <div
+            v-if='state.changingIcon && state.editing && !state.organizing'
+            class='alert alert-info d-flex align-items-center justify-content-between py-2 px-3 mb-2 sticky-top'
+            role='status'
+        >
+            <span class='small'>
+                Tap an icon to change this point
+            </span>
+            <button
+                class='btn btn-sm btn-dark'
+                type='button'
+                @click='stopChangeIcon'
             >
                 Cancel
             </button>
@@ -320,6 +349,7 @@ import {
     IconTrash,
     IconAdjustments,
     IconArrowsMove,
+    IconReplace,
     IconX,
     IconRotate,
 } from '@tabler/icons-vue';
@@ -335,7 +365,9 @@ import {
     selectFolder,
     selectIcon,
     stopMove,
+    stopChangeIcon,
     toggleMove,
+    toggleChangeIcon,
     deletePoint,
     setDetailed,
     setOrganizing,
@@ -383,6 +415,11 @@ watch(() => state.editing?.id, () => {
 function onMoveClick(): void {
     confirmDelete.value = false;
     toggleMove();
+}
+
+function onChangeIconClick(): void {
+    confirmDelete.value = false;
+    toggleChangeIcon();
 }
 
 function onDeleteClick(): void {

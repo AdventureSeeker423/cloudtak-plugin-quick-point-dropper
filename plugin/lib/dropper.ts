@@ -62,6 +62,7 @@ export interface EditingPoint {
     lng: number;
     lat: number;
     icon?: string;
+    cotType?: string;
 }
 
 export const state = reactive({
@@ -90,6 +91,7 @@ export const state = reactive({
     selected: null as DisplayIcon | null,
     editing: null as EditingPoint | null,
     moving: false,
+    changingIcon: false,
     enumerate: false,
     enumerateNext: 1,
 });
@@ -248,6 +250,7 @@ export function setOrganizing(value: boolean): void {
         packBeforeEdit = state.selectedPack;
         stopDrop();
         stopMove();
+        stopChangeIcon();
         clearSaveTimer();
         state.editing = null;
         preEdit = null;
@@ -553,9 +556,9 @@ function clearSaveTimer(): void {
 
 async function persistEdit(): Promise<void> {
     if (!state.editing) return;
-    if (!state.selected?.cotType && !(state.selected?.key || state.editing.icon)) return;
+    if (!state.editing.cotType && !state.editing.icon) return;
     try {
-        await upsertCot({ ...state.editing, icon: state.selected?.key || state.editing.icon });
+        await upsertCot({ ...state.editing });
     } catch (err) {
         state.error = err instanceof Error ? err.message : String(err);
     }
@@ -606,6 +609,7 @@ export function clearSelection(): void {
     if (state.organizing) return;
     stopDrop();
     stopMove();
+    stopChangeIcon();
     clearSaveTimer();
     state.editing = null;
     preEdit = null;
@@ -633,6 +637,13 @@ const onKeyDown = (e: KeyboardEvent): void => {
         e.preventDefault();
         e.stopImmediatePropagation();
         stopMove();
+        blurMapFocus();
+        return;
+    }
+    if (state.changingIcon) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        stopChangeIcon();
         blurMapFocus();
         return;
     }
@@ -833,6 +844,7 @@ export function stopMove(): void {
 export function startMove(): void {
     if (!state.editing || state.organizing) return;
     stopDrop();
+    stopChangeIcon();
     const was = state.moving;
     state.moving = true;
     applyDropCursor();
@@ -844,9 +856,26 @@ export function toggleMove(): void {
     else startMove();
 }
 
+export function stopChangeIcon(): void {
+    state.changingIcon = false;
+}
+
+export function startChangeIcon(): void {
+    if (!state.editing || state.organizing) return;
+    stopDrop();
+    stopMove();
+    state.changingIcon = true;
+}
+
+export function toggleChangeIcon(): void {
+    if (state.changingIcon) stopChangeIcon();
+    else startChangeIcon();
+}
+
 function startDrop(): void {
     if (!state.selected) return;
     stopMove();
+    stopChangeIcon();
     clearSaveTimer();
     state.editing = null;
     preEdit = null;
@@ -858,21 +887,30 @@ function startDrop(): void {
 
 export function selectIcon(icon: DisplayIcon): void {
     if (state.organizing) return;
+    if (state.changingIcon && state.editing) {
+        state.selected = icon;
+        const target = state.editing;
+        clearSaveTimer();
+        void upsertCot({ ...target, replaceIcon: true }).then(() => {
+            stopChangeIcon();
+        }).catch((err) => {
+            state.error = err instanceof Error ? err.message : String(err);
+        });
+        return;
+    }
     const changed = state.selected?.key !== icon.key;
     state.selected = icon;
     if (changed) {
         suppressSave = true;
         state.title = '';
+        resetEnumerate();
         queueMicrotask(() => {
             suppressSave = false;
         });
     }
-    const target = state.editing;
-    if (target) {
+    if (state.editing) {
         clearSaveTimer();
-        void upsertCot(target).catch((err) => {
-            state.error = err instanceof Error ? err.message : String(err);
-        });
+        void persistEdit();
     }
     startDrop();
     focusTitleInput();
@@ -886,8 +924,7 @@ export async function deletePoint(): Promise<void> {
     try {
         const mapStore = useMapStore(api.pinia);
         await mapStore.worker.db.remove(id);
-        state.editing = null;
-        preEdit = null;
+        clearSelection();
     } catch (err) {
         state.error = err instanceof Error ? err.message : String(err);
     }
@@ -946,12 +983,23 @@ async function upsertCot(opts: {
     lat: number;
     icon?: string;
     enumerate?: boolean;
+    replaceIcon?: boolean;
 }): Promise<void> {
     if (!api) return;
     const selected = state.selected;
-    const cotType = selected?.cotType;
-    const icon = selected && !cotType ? selected.key : (!cotType ? opts.icon : undefined);
-    if (!cotType && !icon) return;
+    const preserve = !opts.replaceIcon && state.editing?.id === opts.id;
+    let useType: string | undefined;
+    let useIcon: string | undefined;
+    if (preserve) {
+        useType = state.editing?.cotType;
+        useIcon = state.editing?.icon;
+    } else {
+        useType = selected?.cotType;
+        useIcon = selected && !selected.cotType
+            ? selected.key
+            : (!selected?.cotType ? opts.icon : undefined);
+    }
+    if (!useType && !useIcon) return;
     const mapStore = useMapStore(api.pinia);
     const stem = state.title.trim() || defaultCallsign(selected) || 'Point';
     const callsign = opts.enumerate ? enumeratedCallsign(stem) : stem;
@@ -976,20 +1024,40 @@ async function upsertCot(opts: {
     norm.properties.how = 'h-g-i-g-o';
     norm.properties.archived = true;
     norm.properties.remarks = remarks;
-    if (cotType) {
-        norm.properties.type = selected?.legacyType || cotType;
+    if (preserve) {
+        if (useType) norm.properties.type = useType;
+        if (useIcon) {
+            norm.properties.icon = useIcon;
+        } else {
+            delete norm.properties.icon;
+            if (useType && useType !== 'u-d-p') {
+                norm.properties['marker-opacity'] = 1;
+            }
+        }
+    } else if (selected?.cotType) {
+        norm.properties.type = selected.legacyType || selected.cotType;
         norm.properties['marker-opacity'] = 1;
         delete norm.properties.icon;
     } else {
         norm.properties.type = 'u-d-p';
-        norm.properties.icon = icon;
+        norm.properties.icon = useIcon;
     }
     await mapStore.worker.db.add(JSON.parse(JSON.stringify(norm)), { authored: true });
+    if (opts.replaceIcon && state.editing && selected) {
+        if (selected.cotType) {
+            state.editing.icon = undefined;
+            state.editing.cotType = selected.legacyType || selected.cotType;
+        } else {
+            state.editing.icon = selected.key;
+            state.editing.cotType = 'u-d-p';
+        }
+    }
     if (opts.enumerate) bumpEnumerate();
 }
 
 async function beginEdit(uid: string): Promise<void> {
     stopMove();
+    stopChangeIcon();
     const feat = await getFeature(uid);
     if (!feat) {
         state.error = 'Could not load that point';
@@ -1014,6 +1082,7 @@ async function beginEdit(uid: string): Promise<void> {
         lng: Number(geom.coordinates[0]),
         lat: Number(geom.coordinates[1]),
         icon: icon || undefined,
+        cotType: cotType || undefined,
     };
 
     const standard = matchStandardType(cotType);
@@ -1029,9 +1098,13 @@ async function beginEdit(uid: string): Promise<void> {
                 state.selected = match;
             } else {
                 const loaded = await displayFromDexie(iconset, path);
-                if (loaded) state.selected = loaded;
+                state.selected = loaded;
             }
+        } else {
+            state.selected = null;
         }
+    } else {
+        state.selected = null;
     }
     queueMicrotask(() => {
         suppressSave = false;
@@ -1333,6 +1406,7 @@ export function init(pluginAPI: PluginAPI): void {
         if (to.name !== ROUTE_NAME) {
             stopDrop();
             stopMove();
+            stopChangeIcon();
             clearSaveTimer();
             state.editing = null;
             preEdit = null;
@@ -1348,6 +1422,7 @@ export function destroy(): void {
     clearSaveTimer();
     stopDrop();
     stopMove();
+    stopChangeIcon();
     state.editing = null;
     preEdit = null;
     titleInputEl = null;
