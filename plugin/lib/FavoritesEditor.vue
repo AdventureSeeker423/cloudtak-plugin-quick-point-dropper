@@ -108,20 +108,21 @@
                     class='qpd-add-row'
                     :class='{ "qpd-add-on": isFavorite(icon) }'
                     type='button'
+                    :title='iconLabel(icon)'
                     @click='toggleFavorite(icon)'
                 >
                     <span class='qpd-icon-thumb'>
                         <img
                             v-if='icon.url'
                             :src='icon.url'
-                            :alt='icon.name'
+                            :alt='iconLabel(icon)'
                         >
                         <span
                             v-else
                             class='qpd-icon-missing'
                         >?</span>
                     </span>
-                    <span class='qpd-list-label'>{{ icon.path || icon.name }}</span>
+                    <span class='qpd-list-label'>{{ iconLabel(icon) }}</span>
                     <span class='qpd-add-badge'>
                         {{ isFavorite(icon) ? 'Added' : 'Add' }}
                     </span>
@@ -153,6 +154,7 @@ import {
     hasUngroupedIcons,
     isFavorite,
     toggleFavorite,
+    iconLabel,
 } from './dropper.ts';
 
 const libraryIcons = computed(() => visibleLibraryIcons());

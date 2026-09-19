@@ -157,14 +157,14 @@
                                 "qpd-list-item-static": state.organizing
                             }
                         ]'
-                        :title='icon.path || icon.name'
+                        :title='iconLabel(icon)'
                         @click='onPick(icon)'
                     >
                         <span class='qpd-icon-thumb'>
                             <img
                                 v-if='icon.url'
                                 :src='icon.url'
-                                :alt='icon.name'
+                                :alt='iconLabel(icon)'
                             >
                             <span
                                 v-else
@@ -174,7 +174,7 @@
                         <span
                             v-if='state.organizing || state.detailed'
                             class='qpd-list-label'
-                        >{{ icon.path || icon.name }}</span>
+                        >{{ iconLabel(icon) }}</span>
                     </button>
                     <div
                         v-if='state.organizing'
@@ -261,6 +261,7 @@ import {
     moveIcon,
     assignIconSection,
     placeIcon,
+    iconLabel,
     type DisplayIcon,
     type FavoriteGroup,
 } from './dropper.ts';

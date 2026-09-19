@@ -88,6 +88,7 @@ export const state = reactive({
     sections: [] as FavoriteSection[],
     selected: null as DisplayIcon | null,
     editing: null as EditingPoint | null,
+    moving: false,
 });
 
 function loadDetailed(): boolean {
@@ -118,6 +119,29 @@ export function setDetailed(value: boolean): void {
 function iconName(path: string): string {
     const segs = path.split('/').filter(Boolean);
     return segs[segs.length - 1] || path;
+}
+
+/** First letter of each word capitalized when the Title field is empty. */
+function toTitleCase(raw: string): string {
+    const base = raw.replace(/\.[a-z0-9]{2,4}$/i, '').trim();
+    if (!base) return raw;
+    return base
+        .split(/[\s_-]+/)
+        .filter(Boolean)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
+export function iconLabel(icon: { name?: string; path?: string }): string {
+    const preferred = icon.name && !icon.name.includes('/')
+        ? icon.name
+        : (icon.path || icon.name || '');
+    return toTitleCase(iconName(preferred) || preferred);
+}
+
+export function defaultCallsign(icon?: DisplayIcon | null): string {
+    if (!icon) return '';
+    return iconLabel(icon) || 'Point';
 }
 
 /** Top-level folder in an icon path, or '' when the icon sits at the pack root. */
@@ -187,6 +211,7 @@ export function setOrganizing(value: boolean): void {
     if (next) {
         packBeforeEdit = state.selectedPack;
         stopDrop();
+        stopMove();
         clearSaveTimer();
         state.editing = null;
         preEdit = null;
@@ -517,6 +542,7 @@ function restorePreEdit(): void {
 
 export async function cancelEdit(): Promise<void> {
     if (!state.editing) return;
+    stopMove();
     clearSaveTimer();
     try {
         await persistEdit();
@@ -530,6 +556,12 @@ export async function cancelEdit(): Promise<void> {
 const onKeyDown = (e: KeyboardEvent): void => {
     if (e.key !== 'Escape') return;
     if (!pluginRouteActive()) return;
+    if (state.moving) {
+        e.preventDefault();
+        e.stopPropagation();
+        stopMove();
+        return;
+    }
     if (state.editing) {
         e.preventDefault();
         e.stopPropagation();
@@ -579,6 +611,56 @@ function setCursor(cursor: string): void {
     } catch { /* map not ready */ }
 }
 
+function dropCursorActive(): boolean {
+    return state.dropping || state.moving;
+}
+
+function ensureCursorStyle(): void {
+    if (document.getElementById('qpd-cursor-style')) return;
+    const el = document.createElement('style');
+    el.id = 'qpd-cursor-style';
+    el.textContent = '.qpd-crosshair,.qpd-crosshair *{cursor:crosshair !important;}';
+    document.head.appendChild(el);
+}
+
+function mapCursorEls(): HTMLElement[] {
+    if (!api) return [];
+    const els: HTMLElement[] = [];
+    const map = api.map as {
+        getCanvas?: () => HTMLElement;
+        getCanvasContainer?: () => HTMLElement;
+        getContainer?: () => HTMLElement;
+    };
+    try {
+        const canvas = map.getCanvas?.();
+        if (canvas) els.push(canvas);
+    } catch { /* ignore */ }
+    try {
+        const wrap = map.getCanvasContainer?.();
+        if (wrap) els.push(wrap);
+    } catch { /* ignore */ }
+    try {
+        const box = map.getContainer?.();
+        if (box) els.push(box);
+    } catch { /* ignore */ }
+    return els;
+}
+
+function applyDropCursor(): void {
+    const on = dropCursorActive();
+    try {
+        if (on) ensureCursorStyle();
+        for (const el of mapCursorEls()) {
+            el.classList.toggle('qpd-crosshair', on);
+        }
+        setCursor(on ? 'crosshair' : '');
+    } catch { /* map not ready */ }
+}
+
+const onMapMouseMove = (): void => {
+    if (dropCursorActive()) applyDropCursor();
+};
+
 function clearRadial(): void {
     if (!api) return;
     try {
@@ -595,24 +677,54 @@ function pluginRouteActive(): boolean {
 export function stopDrop(): void {
     const was = state.dropping;
     state.dropping = false;
-    setCursor('');
+    applyDropCursor();
     if (was) onDroppingChange?.(false);
+}
+
+export function stopMove(): void {
+    if (!state.moving) return;
+    state.moving = false;
+    applyDropCursor();
+    if (!state.dropping) onDroppingChange?.(false);
+}
+
+export function startMove(): void {
+    if (!state.editing || state.organizing) return;
+    stopDrop();
+    const was = state.moving;
+    state.moving = true;
+    applyDropCursor();
+    if (!was) onDroppingChange?.(true);
+}
+
+export function toggleMove(): void {
+    if (state.moving) stopMove();
+    else startMove();
 }
 
 function startDrop(): void {
     if (!state.selected) return;
+    stopMove();
     clearSaveTimer();
     state.editing = null;
     preEdit = null;
     const was = state.dropping;
     state.dropping = true;
-    setCursor('crosshair');
+    applyDropCursor();
     if (!was) onDroppingChange?.(true);
 }
 
 export function selectIcon(icon: DisplayIcon): void {
     if (state.organizing) return;
+    const changed = state.selected?.key !== icon.key;
     state.selected = icon;
+    if (changed) {
+        suppressSave = true;
+        state.title = '';
+        queueMicrotask(() => {
+            suppressSave = false;
+        });
+    }
     const target = state.editing;
     if (target) {
         clearSaveTimer();
@@ -626,6 +738,7 @@ export function selectIcon(icon: DisplayIcon): void {
 export async function deletePoint(): Promise<void> {
     if (!api || !state.editing) return;
     const id = state.editing.id;
+    stopMove();
     clearSaveTimer();
     try {
         const mapStore = useMapStore(api.pinia);
@@ -680,7 +793,7 @@ async function upsertCot(opts: { id: string; lng: number; lat: number; icon?: st
     const icon = selected && !cotType ? selected.key : (!cotType ? opts.icon : undefined);
     if (!cotType && !icon) return;
     const mapStore = useMapStore(api.pinia);
-    const callsign = state.title.trim() || selected?.name || 'Point';
+    const callsign = state.title.trim() || defaultCallsign(selected) || 'Point';
     const remarks = state.remarks.trim();
 
     const feat = {
@@ -713,6 +826,7 @@ async function upsertCot(opts: { id: string; lng: number; lat: number; icon?: st
 }
 
 async function beginEdit(uid: string): Promise<void> {
+    stopMove();
     const feat = await getFeature(uid);
     if (!feat) {
         state.error = 'Could not load that point';
@@ -769,13 +883,34 @@ type MapClickEvent = {
 const onMapClick = (e: MapClickEvent): void => {
     if (!pluginRouteActive() || state.organizing) return;
 
-    if (state.dropping) {
-        if (!state.selected) return;
-        const id = crypto.randomUUID();
-        void upsertCot({ id, lng: e.lngLat.lng, lat: e.lngLat.lat }).catch((err) => {
+    if (state.moving && state.editing) {
+        const target = {
+            ...state.editing,
+            lng: e.lngLat.lng,
+            lat: e.lngLat.lat,
+        };
+        state.editing.lng = target.lng;
+        state.editing.lat = target.lat;
+        void upsertCot(target).then(() => {
+            stopMove();
+        }).catch((err) => {
             state.error = err instanceof Error ? err.message : String(err);
         });
         clearRadial();
+        return;
+    }
+
+    if (state.dropping) {
+        if (!state.selected) return;
+        const id = crypto.randomUUID();
+        void upsertCot({ id, lng: e.lngLat.lng, lat: e.lngLat.lat }).then(() => {
+            applyDropCursor();
+            requestAnimationFrame(applyDropCursor);
+        }).catch((err) => {
+            state.error = err instanceof Error ? err.message : String(err);
+        });
+        clearRadial();
+        applyDropCursor();
         return;
     }
 
@@ -999,6 +1134,7 @@ async function load(): Promise<void> {
 export function init(pluginAPI: PluginAPI): void {
     if (api) {
         try { api.map.off('click', onMapClick as never); } catch { /* ignore */ }
+        try { api.map.off('mousemove', onMapMouseMove as never); } catch { /* ignore */ }
         window.removeEventListener('keydown', onKeyDown, true);
         removeAfterEach?.();
         removeAfterEach = undefined;
@@ -1008,6 +1144,7 @@ export function init(pluginAPI: PluginAPI): void {
 
     try {
         api.map.on('click', onMapClick as never);
+        api.map.on('mousemove', onMapMouseMove as never);
     } catch (err) {
         console.warn('QPD: map click handler not attached yet', err);
     }
@@ -1017,6 +1154,7 @@ export function init(pluginAPI: PluginAPI): void {
     const unhook = api.router.afterEach((to) => {
         if (to.name !== ROUTE_NAME) {
             stopDrop();
+            stopMove();
             clearSaveTimer();
             state.editing = null;
             preEdit = null;
@@ -1031,13 +1169,15 @@ export function init(pluginAPI: PluginAPI): void {
 export function destroy(): void {
     clearSaveTimer();
     stopDrop();
+    stopMove();
     state.editing = null;
     preEdit = null;
     removeAfterEach?.();
     removeAfterEach = undefined;
     try { api?.map.off('click', onMapClick as never); } catch { /* map not ready */ }
+    try { api?.map.off('mousemove', onMapMouseMove as never); } catch { /* map not ready */ }
     window.removeEventListener('keydown', onKeyDown, true);
-    setCursor('');
+    applyDropCursor();
     revokeThumbs();
     revokeLibraryThumbs();
     state.organizing = false;

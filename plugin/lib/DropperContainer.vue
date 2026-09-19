@@ -2,18 +2,48 @@
     <div class='col-12 px-2 pt-2 pb-3'>
         <div
             v-if='state.editing && !state.organizing'
-            class='d-flex mb-2'
+            class='d-flex mb-2 gap-2'
         >
             <button
-                class='btn btn-sm btn-outline-danger w-100'
+                class='btn btn-sm w-100'
+                :class='state.moving ? "btn-primary" : "btn-outline-secondary"'
                 type='button'
-                @click='deletePoint'
+                @click='onMoveClick'
+            >
+                <IconArrowsMove
+                    :size='16'
+                    class='me-1'
+                />
+                Move
+            </button>
+            <button
+                class='btn btn-sm w-100'
+                :class='confirmDelete ? "btn-danger" : "btn-outline-danger"'
+                type='button'
+                @click='onDeleteClick'
             >
                 <IconTrash
                     :size='16'
                     class='me-1'
                 />
-                Delete
+                {{ confirmDelete ? 'Confirm deletion' : 'Delete' }}
+            </button>
+        </div>
+
+        <div
+            v-if='state.moving && state.editing && !state.organizing'
+            class='alert alert-info d-flex align-items-center justify-content-between py-2 px-3 mb-2 sticky-top'
+            role='status'
+        >
+            <span class='small'>
+                Click the map to move this point
+            </span>
+            <button
+                class='btn btn-sm btn-dark'
+                type='button'
+                @click='stopMove'
+            >
+                Cancel
             </button>
         </div>
 
@@ -162,7 +192,7 @@
                     v-model='state.title'
                     class='form-control'
                     type='text'
-                    placeholder='Icon name if empty'
+                    :placeholder='titlePreview'
                 >
                 <button
                     type='button'
@@ -237,14 +267,14 @@
                     state.detailed ? "qpd-list-item" : "qpd-icon",
                     { "qpd-icon-selected": state.selected?.key === icon.key }
                 ]'
-                :title='icon.path || icon.name'
+                :title='iconLabel(icon)'
                 @click='selectIcon(icon)'
             >
                 <span class='qpd-icon-thumb'>
                     <img
                         v-if='icon.url'
                         :src='icon.url'
-                        :alt='icon.name'
+                        :alt='iconLabel(icon)'
                     >
                     <span
                         v-else
@@ -254,19 +284,20 @@
                 <span
                     v-if='state.detailed'
                     class='qpd-list-label'
-                >{{ icon.path || icon.name }}</span>
+                >{{ iconLabel(icon) }}</span>
             </button>
         </div>
     </div>
 </template>
 
 <script setup lang='ts'>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import {
     IconLayoutGrid,
     IconListDetails,
     IconTrash,
     IconAdjustments,
+    IconArrowsMove,
     IconX,
 } from '@tabler/icons-vue';
 import FavoritesBoard from './FavoritesBoard.vue';
@@ -282,6 +313,8 @@ import {
     selectSection,
     selectIcon,
     stopDrop,
+    stopMove,
+    toggleMove,
     deletePoint,
     setDetailed,
     setOrganizing,
@@ -292,6 +325,8 @@ import {
     hasUnsortedFavorites,
     sortedSections,
     visibleIcons,
+    defaultCallsign,
+    iconLabel,
 } from './dropper.ts';
 
 defineProps<{
@@ -305,6 +340,26 @@ const sections = computed(() => sortedSections());
 const sectionSelectVisible = computed(() => showSectionSelect());
 const unsortedFavorites = computed(() => hasUnsortedFavorites());
 const icons = computed(() => visibleIcons());
+const titlePreview = computed(() => defaultCallsign(state.selected) || 'Point');
+const confirmDelete = ref(false);
+
+watch(() => state.editing?.id, () => {
+    confirmDelete.value = false;
+});
+
+function onMoveClick(): void {
+    confirmDelete.value = false;
+    toggleMove();
+}
+
+function onDeleteClick(): void {
+    if (!confirmDelete.value) {
+        confirmDelete.value = true;
+        return;
+    }
+    confirmDelete.value = false;
+    void deletePoint();
+}
 
 function onPackChange(ev: Event): void {
     const value = (ev.target as HTMLSelectElement).value;
