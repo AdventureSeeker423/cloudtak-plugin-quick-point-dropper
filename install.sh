@@ -20,7 +20,9 @@
 #
 # Options:
 #   /path/to/CloudTAK   CloudTAK checkout (the dir containing docker-compose.yml).
-#                       Defaults to ~/CloudTAK.
+#                       Optional. If omitted (or the given path is missing), the
+#                       script uses the first of: $CLOUDTAK, ~/CloudTAK,
+#                       /home/takwerx/CloudTAK, /home/*/CloudTAK.
 #   --no-pull           Skip git pull (deploy whatever is already in this checkout).
 #   --pull              No-op; pull is the default on install/update.
 #   --no-build          Copy/remove files only; skip the docker rebuild + restart.
@@ -53,16 +55,59 @@ for arg in "$@"; do
         *) CT_DIR="$arg" ;;
     esac
 done
-CT_DIR="${CT_DIR:-$HOME/CloudTAK}"
 
-if [ ! -d "$CT_DIR" ]; then
-    echo "ERROR: CloudTAK dir not found: $CT_DIR" >&2
-    echo "  Pass the path explicitly: ./install.sh /path/to/CloudTAK" >&2
-    exit 1
-fi
-if [ ! -d "$CT_DIR/api" ]; then
+# A CloudTAK checkout is the dir that contains api/ (and usually docker-compose.yml).
+looks_like_cloudtak() {
+    [ -d "$1/api" ]
+}
+
+# First matching checkout. Prints the path or returns 1.
+find_cloudtak() {
+    local cand seen="|"
+    local candidates=()
+
+    [ -n "${CLOUDTAK:-}" ] && candidates+=("$CLOUDTAK")
+    candidates+=("$HOME/CloudTAK")
+    candidates+=("/home/takwerx/CloudTAK")
+    for cand in /home/*/CloudTAK; do
+        [ -d "$cand" ] && candidates+=("$cand")
+    done
+
+    for cand in "${candidates[@]}"; do
+        case "$seen" in
+            *"|$cand|"*) continue ;;
+        esac
+        seen="${seen}${cand}|"
+        if looks_like_cloudtak "$cand"; then
+            printf '%s\n' "$cand"
+            return 0
+        fi
+    done
+    return 1
+}
+
+REQUESTED="$CT_DIR"
+if [ -n "$CT_DIR" ] && looks_like_cloudtak "$CT_DIR"; then
+    :
+elif [ -n "$CT_DIR" ] && [ -e "$CT_DIR" ]; then
     echo "ERROR: $CT_DIR does not look like a CloudTAK checkout (no api/ dir)." >&2
     exit 1
+else
+    FOUND="$(find_cloudtak || true)"
+    if [ -z "$FOUND" ]; then
+        if [ -n "$REQUESTED" ]; then
+            echo "ERROR: CloudTAK dir not found: $REQUESTED" >&2
+        else
+            echo "ERROR: CloudTAK dir not found (tried \$CLOUDTAK, ~/CloudTAK, /home/takwerx/CloudTAK)." >&2
+        fi
+        echo "  Pass the path explicitly: ./install.sh /path/to/CloudTAK" >&2
+        exit 1
+    fi
+    if [ -n "$REQUESTED" ] && [ "$FOUND" != "$REQUESTED" ]; then
+        echo "Note: $REQUESTED not found; using $FOUND"
+        echo
+    fi
+    CT_DIR="$FOUND"
 fi
 if [ "$DO_BUILD" -eq 1 ] && [ ! -f "$CT_DIR/docker-compose.yml" ]; then
     echo "ERROR: no docker-compose.yml in $CT_DIR — cannot rebuild." >&2
