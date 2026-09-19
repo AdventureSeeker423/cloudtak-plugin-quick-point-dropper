@@ -84,7 +84,7 @@ Restart the CloudTAK API so it loads `plugin-qpd.ts`, and restart `npm run serve
 ## Usage
 
 1. Open **Quick Point Dropper** from the right-side menu.
-2. Choose **Favorites**, **Standard**, or an icon pack. Toggle the grid button for icon names. Use the search box to filter icons.
+2. Choose **Favorites**, **Standard**, or an icon pack. Use search to filter icons, and the list/grid button beside it for icon names.
 3. The Title / Callsign box previews the selected icon’s name as placeholder text. Type to override it, or tap another icon to replace that default. Use the X to clear a custom title. Turn on **Enumerate Points** to append a counter (space + number) on each drop; set the next number or reset it to 1. Notes / Remarks persist across drops.
 4. Tap an icon — the cursor becomes a crosshair. Every map click drops a new point.
 5. Tap **Stop Dropping Points** in the bottom bar to leave drop mode, or **Escape** to stop dropping and also clear Title / Callsign, Notes / Remarks, and the selected icon. **Clear Selection** (top right) does the same clear.

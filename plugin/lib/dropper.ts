@@ -618,31 +618,43 @@ export function clearSelection(): void {
     });
 }
 
+function blurMapFocus(): void {
+    try {
+        for (const el of mapCursorEls()) {
+            if (document.activeElement === el) el.blur();
+        }
+    } catch { /* ignore */ }
+}
+
 const onKeyDown = (e: KeyboardEvent): void => {
     if (e.key !== 'Escape') return;
     if (!pluginRouteActive()) return;
     if (state.moving) {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         stopMove();
+        blurMapFocus();
         return;
     }
     if (state.editing) {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         void cancelEdit();
+        blurMapFocus();
         return;
     }
     if (state.organizing) {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
         setOrganizing(false);
+        blurMapFocus();
         return;
     }
     if (!state.dropping) return;
     e.preventDefault();
-    e.stopPropagation();
+    e.stopImmediatePropagation();
     clearSelection();
+    blurMapFocus();
 };
 
 export function setDroppingListener(fn: ((dropping: boolean) => void) | null): void {
@@ -685,6 +697,21 @@ function ensureCursorStyle(): void {
     const el = document.createElement('style');
     el.id = 'qpd-cursor-style';
     el.textContent = '.qpd-crosshair,.qpd-crosshair *{cursor:crosshair !important;}';
+    document.head.appendChild(el);
+}
+
+function ensureMapFocusStyle(): void {
+    if (document.getElementById('qpd-map-focus-style')) return;
+    const el = document.createElement('style');
+    el.id = 'qpd-map-focus-style';
+    el.textContent = [
+        '.maplibregl-canvas:focus,.maplibregl-canvas:focus-visible,',
+        '.mapboxgl-canvas:focus,.mapboxgl-canvas:focus-visible,',
+        '.maplibregl-map:focus,.maplibregl-map:focus-visible,',
+        '.maplibregl-canvas-container:focus{',
+        'outline:none !important;box-shadow:none !important;',
+        '}',
+    ].join('');
     document.head.appendChild(el);
 }
 
@@ -1289,6 +1316,7 @@ export function init(pluginAPI: PluginAPI): void {
     }
 
     api = pluginAPI;
+    ensureMapFocusStyle();
 
     try {
         api.map.on('click', onMapClick as never);

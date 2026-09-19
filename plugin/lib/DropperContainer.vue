@@ -65,7 +65,7 @@
 
         <div
             v-show='!state.organizing'
-            class='d-flex align-items-center gap-2 mb-2 flex-wrap'
+            class='d-flex align-items-center gap-2 mb-2'
         >
             <select
                 class='form-select form-select-sm'
@@ -86,8 +86,24 @@
                     {{ pack.name }}
                 </option>
             </select>
+            <button
+                v-if='state.writable'
+                type='button'
+                class='btn btn-sm btn-outline-secondary flex-shrink-0'
+                title='Edit favorites'
+                @click='setOrganizing(true)'
+            >
+                <IconAdjustments
+                    :size='18'
+                />
+                <span class='ms-1'>Edit Favorites</span>
+            </button>
+        </div>
+        <div
+            v-if='!state.organizing && folderSelectVisible'
+            class='mb-2'
+        >
             <select
-                v-if='folderSelectVisible'
                 class='form-select form-select-sm'
                 :value='state.selectedFolder'
                 @change='onFolderChange'
@@ -112,57 +128,6 @@
                     Ungrouped
                 </option>
             </select>
-            <select
-                v-if='sectionSelectVisible'
-                class='form-select form-select-sm'
-                :value='state.selectedSection'
-                @change='onSectionChange'
-            >
-                <option :value='ALL_FOLDERS'>
-                    All
-                </option>
-                <option
-                    v-for='section in sections'
-                    :key='section.id'
-                    :value='section.id'
-                >
-                    {{ section.name }}
-                </option>
-                <option
-                    v-if='unsortedFavorites'
-                    :value='UNGROUPED_FOLDER'
-                >
-                    Unsorted
-                </option>
-            </select>
-            <button
-                v-if='state.writable'
-                type='button'
-                class='btn btn-sm btn-outline-secondary flex-shrink-0'
-                title='Edit favorites'
-                @click='setOrganizing(true)'
-            >
-                <IconAdjustments
-                    :size='18'
-                />
-                <span class='ms-1'>Edit Favorites</span>
-            </button>
-            <button
-                v-if='!state.organizing'
-                type='button'
-                class='btn btn-sm btn-outline-secondary flex-shrink-0'
-                :title='state.detailed ? "Compact grid" : "Show full names in a list"'
-                @click='setDetailed(!state.detailed)'
-            >
-                <IconListDetails
-                    v-if='!state.detailed'
-                    :size='18'
-                />
-                <IconLayoutGrid
-                    v-else
-                    :size='18'
-                />
-            </button>
         </div>
 
         <div
@@ -170,43 +135,6 @@
             class='mb-2'
         >
             <label class='form-label small mb-1'>Title / Callsign</label>
-            <div class='qpd-enum-row mb-1'>
-                <div class='form-check form-switch mb-0'>
-                    <input
-                        id='qpd-enumerate'
-                        class='form-check-input'
-                        type='checkbox'
-                        :checked='state.enumerate'
-                        @change='onEnumerateToggle'
-                    >
-                    <label
-                        class='form-check-label small text-nowrap'
-                        for='qpd-enumerate'
-                    >Enumerate Points</label>
-                </div>
-                <input
-                    class='form-control form-control-sm qpd-enum-num'
-                    type='number'
-                    min='0'
-                    step='1'
-                    :value='state.enumerateNext'
-                    title='Next number'
-                    aria-label='Next number'
-                    @input='onEnumerateInput'
-                    @blur='onEnumerateBlur'
-                >
-                <button
-                    class='btn btn-sm btn-outline-secondary px-2'
-                    type='button'
-                    title='Reset to 1'
-                    aria-label='Reset to 1'
-                    @click='resetEnumerate'
-                >
-                    <IconRotate
-                        :size='16'
-                    />
-                </button>
-            </div>
             <div class='input-group input-group-sm'>
                 <input
                     ref='titleInput'
@@ -231,6 +159,51 @@
         </div>
         <div
             v-show='!state.organizing'
+            class='qpd-enum-row mb-2'
+        >
+            <label
+                class='small text-nowrap mb-0'
+                for='qpd-enumerate'
+            >Enumerate Points</label>
+            <div class='form-check form-switch mb-0'>
+                <input
+                    id='qpd-enumerate'
+                    class='form-check-input qpd-enum-switch'
+                    type='checkbox'
+                    :checked='state.enumerate'
+                    @change='onEnumerateToggle'
+                >
+            </div>
+            <div
+                v-if='state.enumerate'
+                class='qpd-enum-tools'
+            >
+                <input
+                    class='form-control form-control-sm qpd-enum-num'
+                    type='number'
+                    min='0'
+                    step='1'
+                    :value='state.enumerateNext'
+                    title='Next number'
+                    aria-label='Next number'
+                    @input='onEnumerateInput'
+                    @blur='onEnumerateBlur'
+                >
+                <button
+                    class='btn btn-sm btn-outline-secondary px-2'
+                    type='button'
+                    title='Reset to 1'
+                    aria-label='Reset to 1'
+                    @click='resetEnumerate'
+                >
+                    <IconRotate
+                        :size='16'
+                    />
+                </button>
+            </div>
+        </div>
+        <div
+            v-show='!state.organizing'
             class='mb-3'
         >
             <label class='form-label small mb-1'>Notes / Remarks</label>
@@ -243,7 +216,7 @@
 
         <div
             v-show='!state.organizing'
-            class='mb-2'
+            class='d-flex align-items-center gap-2 mb-2'
         >
             <div class='input-group input-group-sm'>
                 <input
@@ -266,6 +239,21 @@
                     />
                 </button>
             </div>
+            <button
+                type='button'
+                class='btn btn-sm btn-outline-secondary flex-shrink-0'
+                :title='state.detailed ? "Compact grid" : "Show full names in a list"'
+                @click='setDetailed(!state.detailed)'
+            >
+                <IconListDetails
+                    v-if='!state.detailed'
+                    :size='18'
+                />
+                <IconLayoutGrid
+                    v-else
+                    :size='18'
+                />
+            </button>
         </div>
 
         <div
@@ -345,7 +333,6 @@ import {
     UNGROUPED_FOLDER,
     selectPack,
     selectFolder,
-    selectSection,
     selectIcon,
     stopMove,
     toggleMove,
@@ -354,10 +341,7 @@ import {
     setOrganizing,
     packFolders,
     showFolderSelect,
-    showSectionSelect,
     hasUngroupedIcons,
-    hasUnsortedFavorites,
-    sortedSections,
     visibleIcons,
     defaultCallsign,
     iconLabel,
@@ -375,9 +359,6 @@ defineProps<{
 const folders = computed(() => packFolders(state.icons));
 const folderSelectVisible = computed(() => showFolderSelect(state.icons));
 const ungrouped = computed(() => hasUngroupedIcons(state.icons));
-const sections = computed(() => sortedSections());
-const sectionSelectVisible = computed(() => showSectionSelect());
-const unsortedFavorites = computed(() => hasUnsortedFavorites());
 const icons = computed(() => visibleIcons());
 const titlePreview = computed(() => {
     const stem = defaultCallsign(state.selected) || 'Point';
@@ -447,17 +428,23 @@ function onPackChange(ev: Event): void {
 function onFolderChange(ev: Event): void {
     selectFolder((ev.target as HTMLSelectElement).value);
 }
-
-function onSectionChange(ev: Event): void {
-    selectSection((ev.target as HTMLSelectElement).value);
-}
 </script>
 
 <style scoped>
 .qpd-enum-row {
     display: flex;
     align-items: center;
+    gap: 8px;
+}
+.qpd-enum-tools {
+    display: flex;
+    align-items: center;
     gap: 6px;
+    margin-left: 12px;
+}
+.qpd-enum-switch:checked {
+    background-color: var(--tblr-green, #2fb344);
+    border-color: var(--tblr-green, #2fb344);
 }
 .qpd-enum-num {
     width: 3.25rem;
