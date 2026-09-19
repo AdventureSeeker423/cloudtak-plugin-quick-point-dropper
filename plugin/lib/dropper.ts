@@ -164,7 +164,7 @@ export function visibleIcons(): DisplayIcon[] {
             icons = icons.filter((icon) => iconFolder(icon.path) === state.selectedFolder);
         }
     }
-    return icons.filter(iconMatchesQuery);
+    return icons.filter((icon) => iconMatchesQuery(icon));
 }
 
 export function selectFolder(folder: string): void {
