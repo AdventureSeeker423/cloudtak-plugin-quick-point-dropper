@@ -4,6 +4,7 @@ import type { PluginAPI, PluginInstance } from '@tak-ps/cloudtak';
 import MenuTemplate from './lib/MenuTemplate.vue';
 import DropperContainer from './lib/DropperContainer.vue';
 import DropperBottomBar from './lib/DropperBottomBar.vue';
+import ClearSelectionButton from './lib/ClearSelectionButton.vue';
 import IconPinUrl from './lib/Pin.svg';
 import {
     ROUTE_NAME,
@@ -36,7 +37,8 @@ export default class QuickPointDropper implements PluginInstance {
             name: ROUTE_NAME,
             component: {
                 render: () => h(MenuTemplate, { name: 'Quick Point Dropper', back: false }, {
-                    default: () => h(DropperContainer, { api: this.api })
+                    default: () => h(DropperContainer, { api: this.api }),
+                    buttons: () => h(ClearSelectionButton)
                 })
             }
         }, 'home-menu');

@@ -571,6 +571,22 @@ export async function cancelEdit(): Promise<void> {
     restorePreEdit();
 }
 
+export function clearSelection(): void {
+    if (state.organizing) return;
+    stopDrop();
+    stopMove();
+    clearSaveTimer();
+    state.editing = null;
+    preEdit = null;
+    suppressSave = true;
+    state.title = '';
+    state.remarks = '';
+    state.selected = null;
+    queueMicrotask(() => {
+        suppressSave = false;
+    });
+}
+
 const onKeyDown = (e: KeyboardEvent): void => {
     if (e.key !== 'Escape') return;
     if (!pluginRouteActive()) return;

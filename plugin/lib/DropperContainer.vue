@@ -26,7 +26,7 @@
                     :size='16'
                     class='me-1'
                 />
-                {{ confirmDelete ? 'Confirm deletion' : 'Delete' }}
+                {{ confirmDelete ? 'Confirm Deletion' : 'Delete' }}
             </button>
         </div>
 
