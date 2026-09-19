@@ -2,7 +2,7 @@
  * Quick Point Dropper — shared reactive state, map click handling,
  * CoT create/update, and server-backed favorites.
  */
-import { reactive } from 'vue';
+import { reactive, watch } from 'vue';
 import type { PluginAPI } from '@tak-ps/cloudtak';
 import { normalize_geojson } from '@tak-ps/node-cot/normalize_geojson';
 import { useMapStore } from '../../../src/stores/map.ts';
@@ -19,6 +19,8 @@ export const ROUTE_NAME = 'home-menu-plugin-quick-point-dropper';
 export const MENU_KEY = 'quick-point-dropper';
 export const BOTTOM_BAR_KEY = 'qpd-bottom-bar';
 export const FAVORITES_PACK = '__favorites__';
+export const ALL_FOLDERS = '__all__';
+export const UNGROUPED_FOLDER = '__ungrouped__';
 
 const LS_LAST_PACK = 'cloudtak-qpd-lastIconset';
 const LS_DETAILED = 'cloudtak-qpd-detailedView';
@@ -40,6 +42,7 @@ export interface EditingPoint {
     id: string;
     lng: number;
     lat: number;
+    icon?: string;
 }
 
 export const state = reactive({
@@ -52,6 +55,7 @@ export const state = reactive({
     remarks: '',
     packs: [] as IconPack[],
     selectedPack: FAVORITES_PACK,
+    selectedFolder: ALL_FOLDERS,
     icons: [] as DisplayIcon[],
     favorites: [] as FavoriteIcon[],
     selected: null as DisplayIcon | null,
@@ -88,6 +92,44 @@ function iconName(path: string): string {
     return segs[segs.length - 1] || path;
 }
 
+/** Top-level folder in an icon path, or '' when the icon sits at the pack root. */
+export function iconFolder(path: string): string {
+    const segs = path.split('/').filter(Boolean);
+    return segs.length > 1 ? segs[0] : '';
+}
+
+export function packFolders(icons: DisplayIcon[]): string[] {
+    const folders = new Set<string>();
+    for (const icon of icons) {
+        const folder = iconFolder(icon.path);
+        if (folder) folders.add(folder);
+    }
+    return [...folders].sort((a, b) => a.localeCompare(b));
+}
+
+export function hasUngroupedIcons(icons: DisplayIcon[]): boolean {
+    return icons.some((icon) => !iconFolder(icon.path));
+}
+
+/** Hide the folder dropdown when the pack has no subfolders. */
+export function showFolderSelect(icons: DisplayIcon[]): boolean {
+    return packFolders(icons).length >= 1;
+}
+
+export function visibleIcons(): DisplayIcon[] {
+    if (!showFolderSelect(state.icons) || state.selectedFolder === ALL_FOLDERS) {
+        return state.icons;
+    }
+    if (state.selectedFolder === UNGROUPED_FOLDER) {
+        return state.icons.filter((icon) => !iconFolder(icon.path));
+    }
+    return state.icons.filter((icon) => iconFolder(icon.path) === state.selectedFolder);
+}
+
+export function selectFolder(folder: string): void {
+    state.selectedFolder = folder;
+}
+
 function iconKey(iconset: string, path: string): string {
     return `${iconset}:${path}`;
 }
@@ -96,6 +138,46 @@ let api: PluginAPI | null = null;
 let thumbUrls: string[] = [];
 let onDroppingChange: ((dropping: boolean) => void) | null = null;
 let removeAfterEach: (() => void) | undefined;
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+let suppressSave = false;
+
+function clearSaveTimer(): void {
+    if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = undefined;
+    }
+}
+
+async function persistEdit(): Promise<void> {
+    if (!state.editing) return;
+    const icon = state.selected?.key || state.editing.icon;
+    if (!icon) return;
+    try {
+        await upsertCot({ ...state.editing, icon });
+    } catch (err) {
+        state.error = err instanceof Error ? err.message : String(err);
+    }
+}
+
+function scheduleEditSave(): void {
+    if (suppressSave || !state.editing) return;
+    clearSaveTimer();
+    saveTimer = setTimeout(() => {
+        saveTimer = undefined;
+        void persistEdit();
+    }, 400);
+}
+
+watch(() => state.title, scheduleEditSave);
+watch(() => state.remarks, scheduleEditSave);
+
+const onKeyDown = (e: KeyboardEvent): void => {
+    if (e.key !== 'Escape') return;
+    if (!state.dropping) return;
+    e.preventDefault();
+    e.stopPropagation();
+    stopDrop();
+};
 
 export function setDroppingListener(fn: ((dropping: boolean) => void) | null): void {
     onDroppingChange = fn;
@@ -142,6 +224,7 @@ export function stopDrop(): void {
 
 function startDrop(): void {
     if (!state.selected) return;
+    clearSaveTimer();
     state.editing = null;
     const was = state.dropping;
     state.dropping = true;
@@ -151,12 +234,27 @@ function startDrop(): void {
 
 export function selectIcon(icon: DisplayIcon): void {
     state.selected = icon;
-    if (state.editing) return;
+    const target = state.editing;
+    if (target) {
+        clearSaveTimer();
+        void upsertCot(target).catch((err) => {
+            state.error = err instanceof Error ? err.message : String(err);
+        });
+    }
     startDrop();
 }
 
-export function cancelEdit(): void {
-    state.editing = null;
+export async function deletePoint(): Promise<void> {
+    if (!api || !state.editing) return;
+    const id = state.editing.id;
+    clearSaveTimer();
+    try {
+        const mapStore = useMapStore(api.pinia);
+        await mapStore.worker.db.remove(id);
+        state.editing = null;
+    } catch (err) {
+        state.error = err instanceof Error ? err.message : String(err);
+    }
 }
 
 function cotUidFromClick(point: { x: number; y: number }): string | undefined {
@@ -195,10 +293,12 @@ async function getFeature(uid: string): Promise<{
     }) ?? null;
 }
 
-async function upsertCot(opts: { id: string; lng: number; lat: number }): Promise<void> {
-    if (!api || !state.selected) return;
+async function upsertCot(opts: { id: string; lng: number; lat: number; icon?: string }): Promise<void> {
+    if (!api) return;
+    const icon = state.selected?.key || opts.icon;
+    if (!icon) return;
     const mapStore = useMapStore(api.pinia);
-    const callsign = state.title.trim() || state.selected.name;
+    const callsign = state.title.trim() || state.selected?.name || 'Point';
     const remarks = state.remarks.trim();
 
     const feat = {
@@ -219,7 +319,7 @@ async function upsertCot(opts: { id: string; lng: number; lat: number }): Promis
     const norm: any = await normalize_geojson(feat as any);
     norm.properties.type = 'u-d-p';
     norm.properties.how = 'h-g-i-g-o';
-    norm.properties.icon = state.selected.key;
+    norm.properties.icon = icon;
     norm.properties.archived = true;
     await mapStore.worker.db.add(JSON.parse(JSON.stringify(norm)), { authored: true });
 }
@@ -238,15 +338,17 @@ async function beginEdit(uid: string): Promise<void> {
         return;
     }
 
+    suppressSave = true;
     state.title = String(props.callsign || '');
     state.remarks = String(props.remarks || '');
+    const icon = typeof props.icon === 'string' ? props.icon : '';
     state.editing = {
         id: String(feat.id || uid),
         lng: Number(geom.coordinates[0]),
         lat: Number(geom.coordinates[1]),
+        icon: icon || undefined,
     };
 
-    const icon = typeof props.icon === 'string' ? props.icon : '';
     if (icon) {
         const sep = icon.indexOf(':');
         if (sep > 0) {
@@ -261,17 +363,9 @@ async function beginEdit(uid: string): Promise<void> {
             }
         }
     }
-}
-
-export async function updatePoint(): Promise<void> {
-    if (!state.editing || !state.selected) return;
-    state.error = '';
-    try {
-        await upsertCot(state.editing);
-        state.editing = null;
-    } catch (err) {
-        state.error = err instanceof Error ? err.message : String(err);
-    }
+    queueMicrotask(() => {
+        suppressSave = false;
+    });
 }
 
 type MapClickEvent = {
@@ -364,12 +458,18 @@ async function iconsForFavorites(): Promise<DisplayIcon[]> {
 
 export async function selectPack(uid: string): Promise<void> {
     state.selectedPack = uid;
+    state.selectedFolder = ALL_FOLDERS;
     saveLastPack(uid);
     state.loading = true;
     try {
         state.icons = uid === FAVORITES_PACK
             ? await iconsForFavorites()
             : await iconsForPack(uid);
+        const folders = packFolders(state.icons);
+        const ungrouped = hasUngroupedIcons(state.icons);
+        state.selectedFolder = folders.length === 1 && !ungrouped
+            ? folders[0]
+            : ALL_FOLDERS;
     } catch (err) {
         state.error = err instanceof Error ? err.message : String(err);
         state.icons = [];
@@ -454,6 +554,7 @@ async function load(): Promise<void> {
 export function init(pluginAPI: PluginAPI): void {
     if (api) {
         try { api.map.off('click', onMapClick as never); } catch { /* ignore */ }
+        window.removeEventListener('keydown', onKeyDown, true);
         removeAfterEach?.();
         removeAfterEach = undefined;
     }
@@ -466,6 +567,8 @@ export function init(pluginAPI: PluginAPI): void {
         console.warn('QPD: map click handler not attached yet', err);
     }
 
+    window.addEventListener('keydown', onKeyDown, true);
+
     const unhook = api.router.afterEach((to) => {
         if (to.name !== ROUTE_NAME) stopDrop();
     });
@@ -475,10 +578,12 @@ export function init(pluginAPI: PluginAPI): void {
 }
 
 export function destroy(): void {
+    clearSaveTimer();
     stopDrop();
     removeAfterEach?.();
     removeAfterEach = undefined;
     try { api?.map.off('click', onMapClick as never); } catch { /* map not ready */ }
+    window.removeEventListener('keydown', onKeyDown, true);
     setCursor('');
     revokeThumbs();
     api = null;

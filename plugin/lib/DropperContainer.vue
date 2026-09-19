@@ -1,6 +1,23 @@
 <template>
     <div class='col-12 px-2 pb-3'>
         <div
+            v-if='state.editing'
+            class='d-flex mb-2'
+        >
+            <button
+                class='btn btn-sm btn-outline-danger w-100'
+                type='button'
+                @click='deletePoint'
+            >
+                <IconTrash
+                    :size='16'
+                    class='me-1'
+                />
+                Delete
+            </button>
+        </div>
+
+        <div
             v-if='state.dropping && state.selected'
             class='alert alert-info d-flex align-items-center justify-content-between py-2 px-3 mb-2 sticky-top'
             role='status'
@@ -18,30 +35,6 @@
         </div>
 
         <div
-            v-if='state.editing'
-            class='alert alert-warning d-flex align-items-center justify-content-between py-2 px-3 mb-2'
-            role='status'
-        >
-            <span class='small'>Editing existing point</span>
-            <span class='btn-list'>
-                <button
-                    class='btn btn-sm btn-primary'
-                    type='button'
-                    @click='updatePoint'
-                >
-                    Update Point
-                </button>
-                <button
-                    class='btn btn-sm btn-outline-secondary'
-                    type='button'
-                    @click='cancelEdit'
-                >
-                    Cancel
-                </button>
-            </span>
-        </div>
-
-        <div
             v-if='state.error'
             class='alert alert-danger py-2 px-3 mb-2 small'
             role='alert'
@@ -55,7 +48,7 @@
             />
         </div>
 
-        <div class='d-flex align-items-center gap-2 mb-2'>
+        <div class='d-flex align-items-center gap-2 mb-2 flex-wrap'>
             <select
                 class='form-select form-select-sm'
                 :value='state.selectedPack'
@@ -72,10 +65,36 @@
                     {{ pack.name }}
                 </option>
             </select>
+            <select
+                v-if='folderSelectVisible'
+                class='form-select form-select-sm'
+                :value='state.selectedFolder'
+                @change='onFolderChange'
+            >
+                <option
+                    v-if='folders.length > 1 || ungrouped'
+                    :value='ALL_FOLDERS'
+                >
+                    All
+                </option>
+                <option
+                    v-for='folder in folders'
+                    :key='folder'
+                    :value='folder'
+                >
+                    {{ folder }}
+                </option>
+                <option
+                    v-if='ungrouped'
+                    :value='UNGROUPED_FOLDER'
+                >
+                    Ungrouped
+                </option>
+            </select>
             <button
                 type='button'
                 class='btn btn-sm btn-outline-secondary flex-shrink-0'
-                :title='state.detailed ? "Compact grid" : "Show icon names"'
+                :title='state.detailed ? "Compact grid" : "Show full names in a list"'
                 @click='setDetailed(!state.detailed)'
             >
                 <IconListDetails
@@ -115,7 +134,7 @@
             Loading icons…
         </div>
         <div
-            v-else-if='!state.icons.length'
+            v-else-if='!icons.length'
             class='text-secondary small py-3 text-center'
         >
             <template v-if='state.selectedPack === FAVORITES_PACK'>
@@ -129,16 +148,17 @@
         </div>
         <div
             v-else
-            class='qpd-grid'
-            :class='{ "qpd-grid-detailed": state.detailed }'
+            :class='state.detailed ? "qpd-list" : "qpd-grid"'
         >
             <button
-                v-for='icon in state.icons'
+                v-for='icon in icons'
                 :key='icon.key'
                 type='button'
-                class='qpd-icon'
-                :class='{ "qpd-icon-selected": state.selected?.key === icon.key }'
-                :title='icon.name'
+                :class='[
+                    state.detailed ? "qpd-list-item" : "qpd-icon",
+                    { "qpd-icon-selected": state.selected?.key === icon.key }
+                ]'
+                :title='icon.path || icon.name'
                 @click='selectIcon(icon)'
             >
                 <span class='qpd-icon-thumb'>
@@ -170,40 +190,57 @@
                 </span>
                 <span
                     v-if='state.detailed'
-                    class='qpd-icon-label'
-                >{{ icon.name }}</span>
+                    class='qpd-list-label'
+                >{{ icon.path || icon.name }}</span>
             </button>
         </div>
     </div>
 </template>
 
 <script setup lang='ts'>
+import { computed } from 'vue';
 import {
     IconStar,
     IconStarFilled,
     IconLayoutGrid,
     IconListDetails,
+    IconTrash,
 } from '@tabler/icons-vue';
 import {
     state,
     FAVORITES_PACK,
+    ALL_FOLDERS,
+    UNGROUPED_FOLDER,
     selectPack,
+    selectFolder,
     selectIcon,
     stopDrop,
-    updatePoint,
-    cancelEdit,
+    deletePoint,
     setDetailed,
     isFavorite,
     toggleFavorite,
+    packFolders,
+    showFolderSelect,
+    hasUngroupedIcons,
+    visibleIcons,
 } from './dropper.ts';
 
 defineProps<{
     api?: unknown;
 }>();
 
+const folders = computed(() => packFolders(state.icons));
+const folderSelectVisible = computed(() => showFolderSelect(state.icons));
+const ungrouped = computed(() => hasUngroupedIcons(state.icons));
+const icons = computed(() => visibleIcons());
+
 function onPackChange(ev: Event): void {
     const value = (ev.target as HTMLSelectElement).value;
     void selectPack(value);
+}
+
+function onFolderChange(ev: Event): void {
+    selectFolder((ev.target as HTMLSelectElement).value);
 }
 </script>
 
@@ -213,8 +250,10 @@ function onPackChange(ev: Event): void {
     grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
     gap: 6px;
 }
-.qpd-grid-detailed {
-    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+.qpd-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 .qpd-icon {
     position: relative;
@@ -229,10 +268,26 @@ function onPackChange(ev: Event): void {
     color: inherit;
     cursor: pointer;
 }
-.qpd-icon:hover {
+.qpd-list-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    text-align: left;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+.qpd-icon:hover,
+.qpd-list-item:hover {
     background: rgba(255, 255, 255, 0.06);
 }
-.qpd-icon-selected {
+.qpd-icon.qpd-icon-selected,
+.qpd-list-item.qpd-icon-selected {
     border-color: var(--tblr-primary, #206bc4);
     background: rgba(32, 107, 196, 0.18);
 }
@@ -277,13 +332,13 @@ function onPackChange(ev: Event): void {
 .qpd-star-on {
     color: #ffd43b;
 }
-.qpd-icon-label {
-    font-size: 11px;
-    line-height: 1.2;
-    text-align: center;
-    max-width: 72px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+.qpd-list-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    line-height: 1.3;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 </style>

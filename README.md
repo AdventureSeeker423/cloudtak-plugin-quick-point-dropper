@@ -84,7 +84,7 @@ Restart the CloudTAK API so it loads `plugin-qpd.ts`, and restart `npm run serve
 3. Optionally set Title and Remarks (they persist across drops).
 4. Tap an icon — the cursor becomes a crosshair. Every map click drops a new point.
 5. Tap **Stop** (panel banner or bottom bar) to leave drop mode.
-6. With drop mode off, click any point on the map to load it, change Title/Remarks/icon, and tap **Update Point**.
+6. With drop mode off, click any point on the map to load it. Title, Remarks, and icon changes save immediately. A **Delete** button appears at the top to remove that point.
 7. System admins can star/unstar icons. Everyone else sees the same Favorites list without star controls.
 
 Closing the plugin panel also exits drop mode.
