@@ -20,52 +20,62 @@ Drop CoT points onto the CloudTAK map from any icon pack. Pick an icon, fill Tit
 
 CloudTAK’s `WEB_PLUGINS` build arg **cannot** install this plugin: it only clones the web half, nests the plugin one level too deep for Vite, and drops `server/*.ts` where `vue-tsc` type-checks them (the `/api/qpd/*` routes never load). Use one of the paths below.
 
-### Production (`install.sh`)
+These commands assume CloudTAK lives at `~/CloudTAK` (the `install.sh` default). If yours is elsewhere, change that path.
+
+### Install
 
 ```bash
-git clone <this-repo> cloudtak-plugin-quick-point-dropper
+git clone https://github.com/AdventureSeeker423/cloudtak-plugin-quick-point-dropper.git
 cd cloudtak-plugin-quick-point-dropper
-./install.sh /path/to/CloudTAK
+./install.sh ~/CloudTAK
 ```
 
 That copies:
 
-- `plugin/` → `CloudTAK/api/web/plugins/quick-point-dropper/`
-- `server/plugin-qpd.ts` → `CloudTAK/api/stateless/routes/`
+- `plugin/` → `~/CloudTAK/api/web/plugins/quick-point-dropper/`
+- `server/plugin-qpd.ts` → `~/CloudTAK/api/stateless/routes/`
 
-then rebuilds and recreates the CloudTAK API image (5–15 minutes). Defaults to `~/CloudTAK` if you omit the path.
+then rebuilds and recreates the CloudTAK API image (5–15 minutes).
+
+### Update
 
 ```bash
-./install.sh --pull /path/to/CloudTAK     # git pull, then reinstall + rebuild
-./install.sh --remove /path/to/CloudTAK   # uninstall + rebuild
-./install.sh --no-build /path/to/CloudTAK # copy files only
+cd cloudtak-plugin-quick-point-dropper
+./install.sh --pull ~/CloudTAK
 ```
 
-After the rebuild, in CloudTAK go to **Settings → Refresh App** to activate the new service worker. A normal hard-refresh does **not** work — the service worker intercepts requests. Or close all CloudTAK tabs and reopen. The plugin appears at the bottom of the right-side menu.
+### Remove
+
+```bash
+cd cloudtak-plugin-quick-point-dropper
+./install.sh --remove ~/CloudTAK
+```
+
+Copy files without rebuilding:
+
+```bash
+cd cloudtak-plugin-quick-point-dropper
+./install.sh --no-build ~/CloudTAK
+```
+
+After a rebuild, in CloudTAK go to **Settings → Refresh App** to activate the new service worker. A normal hard-refresh does **not** work — the service worker intercepts requests. Or close all CloudTAK tabs and reopen. The plugin appears at the bottom of the right-side menu.
 
 ### Local development
 
-1. Follow the [CloudTAK Develop guide](https://docs.cloudtak.io/develop/) so the API (`api/`) and web (`api/web`) servers are running.
-2. Point `plugin/package.json`’s `@tak-ps/cloudtak` `file:` path at your CloudTAK `api/web` package, then:
+Follow the [CloudTAK Develop guide](https://docs.cloudtak.io/develop/) so the API (`api/`) and web (`api/web`) servers are running, then from this repo:
 
 ```bash
 cd plugin
 npm install
+cd ..
+mkdir -p ~/CloudTAK/api/web/plugins ~/CloudTAK/api/stateless/routes
+ln -sfn "$(pwd)/plugin" ~/CloudTAK/api/web/plugins/quick-point-dropper
+cp "$(pwd)/server/plugin-qpd.ts" ~/CloudTAK/api/stateless/routes/plugin-qpd.ts
 ```
 
-3. Symlink the web plugin and copy the server route:
+Restart the CloudTAK API so it loads `plugin-qpd.ts`, and restart `npm run serve` in `~/CloudTAK/api/web`.
 
-```bash
-ln -s /path/to/cloudtak-plugin-quick-point-dropper/plugin \
-      /path/to/CloudTAK/api/web/plugins/quick-point-dropper
-
-cp /path/to/cloudtak-plugin-quick-point-dropper/server/plugin-qpd.ts \
-   /path/to/CloudTAK/api/stateless/routes/plugin-qpd.ts
-```
-
-4. Restart the CloudTAK API so it loads `plugin-qpd.ts`, and restart `npm run serve` in `api/web`.
-
-`api/web/plugins/` is git-ignored in CloudTAK.
+`api/web/plugins/` is git-ignored in CloudTAK. Point `plugin/package.json`’s `@tak-ps/cloudtak` `file:` path at `~/CloudTAK/api/web` if it does not already resolve.
 
 ## Usage
 
