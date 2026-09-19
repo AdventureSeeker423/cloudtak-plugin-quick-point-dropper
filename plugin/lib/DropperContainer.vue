@@ -156,19 +156,33 @@
             v-show='!state.organizing'
             class='mb-2'
         >
-            <label class='form-label small mb-1'>Title</label>
-            <input
-                v-model='state.title'
-                class='form-control form-control-sm'
-                type='text'
-                placeholder='Icon name if empty'
-            >
+            <label class='form-label small mb-1'>Title / Callsign</label>
+            <div class='input-group input-group-sm'>
+                <input
+                    v-model='state.title'
+                    class='form-control'
+                    type='text'
+                    placeholder='Icon name if empty'
+                >
+                <button
+                    type='button'
+                    class='btn btn-outline-secondary'
+                    :disabled='!state.title'
+                    title='Clear title'
+                    aria-label='Clear title'
+                    @click='state.title = ""'
+                >
+                    <IconX
+                        :size='16'
+                    />
+                </button>
+            </div>
         </div>
         <div
             v-show='!state.organizing'
             class='mb-3'
         >
-            <label class='form-label small mb-1'>Remarks</label>
+            <label class='form-label small mb-1'>Notes / Remarks</label>
             <textarea
                 v-model='state.remarks'
                 class='form-control form-control-sm'
@@ -253,6 +267,7 @@ import {
     IconListDetails,
     IconTrash,
     IconAdjustments,
+    IconX,
 } from '@tabler/icons-vue';
 import FavoritesBoard from './FavoritesBoard.vue';
 import FavoritesEditor from './FavoritesEditor.vue';

@@ -1,6 +1,6 @@
 # CloudTAK Plugin — Quick Point Dropper
 
-Drop CoT points onto the CloudTAK map from any icon pack. Pick an icon, fill Title/Remarks, and click the map repeatedly. A shared **Favorites** list is stored on the CloudTAK server; only system admins can star or unstar icons.
+Drop CoT points onto the CloudTAK map from any icon pack. Pick an icon, fill Title / Callsign and Notes / Remarks, and click the map repeatedly. A shared **Favorites** list is stored on the CloudTAK server; only system admins can star or unstar icons.
 
 ## Features
 
@@ -11,8 +11,8 @@ Drop CoT points onto the CloudTAK map from any icon pack. Pick an icon, fill Tit
 - Star overlays visible only to CloudTAK **system admins** (`AuthUserAccess.ADMIN` / `profile.system_admin`)
 - Drop mode: crosshair cursor, every map click creates a new CoT (`u-d-p`) even on top of an existing point
 - Sticky in-panel Stop bar plus a bottom-bar Stop widget while dropping
-- With drop mode off and the panel open, click any CoT to load Title/Remarks/icon; changes save immediately
-- Empty Title uses the icon’s name; Remarks go to `properties.remarks` when filled
+- With drop mode off and the panel open, click any CoT to load Title / Callsign, Notes / Remarks, and icon; changes save immediately
+- Empty Title / Callsign uses the icon’s name; Notes / Remarks go to `properties.remarks` when filled
 
 ## Requirements
 
@@ -82,10 +82,10 @@ Restart the CloudTAK API so it loads `plugin-qpd.ts`, and restart `npm run serve
 
 1. Open **Quick Point Dropper** from the right-side menu.
 2. Choose **Favorites**, **Standard**, or an icon pack. Toggle the grid button for icon names. Use the search box to filter icons.
-3. Optionally set Title and Remarks (they persist across drops).
+3. Optionally set Title / Callsign and Notes / Remarks (they persist across drops). Use the X on the title field to clear it.
 4. Tap an icon — the cursor becomes a crosshair. Every map click drops a new point.
 5. Tap **Stop** (panel banner or bottom bar) or **Escape** to leave drop mode.
-6. With drop mode off, click any point on the map to load it. Title, Remarks, and icon changes save immediately. A **Delete** button appears at the top to remove that point. Click empty map or press **Escape** to deselect it. Click an icon to start dropping again.
+6. With drop mode off, click any point on the map to load it. Title / Callsign, Notes / Remarks, and icon changes save immediately. A **Delete** button appears at the top to remove that point. Click empty map or press **Escape** to deselect it. Click an icon to start dropping again.
 7. System admins tap **Edit Favorites** to add or remove icons and to arrange sections. Everyday dropping never stars or unstars by accident.
 8. In the editor, **Add icons** toggles membership from any pack; **Arrange** is for named sections, drag-reorder, and remove. Starred icons with no section sit under **Unsorted**.
 
