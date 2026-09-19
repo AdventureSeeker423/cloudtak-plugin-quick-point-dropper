@@ -1,7 +1,7 @@
 <template>
     <div class='col-12 px-2 pt-2 pb-3'>
         <div
-            v-if='state.editing'
+            v-if='state.editing && !state.organizing'
             class='d-flex mb-2'
         >
             <button
@@ -18,7 +18,7 @@
         </div>
 
         <div
-            v-if='state.dropping && state.selected'
+            v-if='state.dropping && state.selected && !state.organizing'
             class='alert alert-info d-flex align-items-center justify-content-between py-2 px-3 mb-2 sticky-top'
             role='status'
         >
@@ -48,7 +48,12 @@
             />
         </div>
 
-        <div class='d-flex align-items-center gap-2 mb-2 flex-wrap'>
+        <FavoritesEditor v-if='state.organizing' />
+
+        <div
+            v-show='!state.organizing'
+            class='d-flex align-items-center gap-2 mb-2 flex-wrap'
+        >
             <select
                 class='form-select form-select-sm'
                 :value='state.selectedPack'
@@ -118,19 +123,19 @@
                 </option>
             </select>
             <button
-                v-if='state.writable && state.selectedPack === FAVORITES_PACK'
+                v-if='state.writable'
                 type='button'
-                class='btn btn-sm flex-shrink-0'
-                :class='state.organizing ? "btn-primary" : "btn-outline-secondary"'
-                :title='state.organizing ? "Done organizing" : "Organize favorites"'
-                @click='setOrganizing(!state.organizing)'
+                class='btn btn-sm btn-outline-secondary flex-shrink-0'
+                title='Edit favorites'
+                @click='setOrganizing(true)'
             >
                 <IconAdjustments
                     :size='18'
                 />
-                <span class='ms-1'>{{ state.organizing ? 'Done' : 'Organize' }}</span>
+                <span class='ms-1'>Edit Favorites</span>
             </button>
             <button
+                v-if='!state.organizing'
                 type='button'
                 class='btn btn-sm btn-outline-secondary flex-shrink-0'
                 :title='state.detailed ? "Compact grid" : "Show full names in a list"'
@@ -147,7 +152,10 @@
             </button>
         </div>
 
-        <div class='mb-2'>
+        <div
+            v-show='!state.organizing'
+            class='mb-2'
+        >
             <label class='form-label small mb-1'>Title</label>
             <input
                 v-model='state.title'
@@ -156,7 +164,10 @@
                 placeholder='Icon name if empty'
             >
         </div>
-        <div class='mb-3'>
+        <div
+            v-show='!state.organizing'
+            class='mb-3'
+        >
             <label class='form-label small mb-1'>Remarks</label>
             <textarea
                 v-model='state.remarks'
@@ -166,7 +177,10 @@
             />
         </div>
 
-        <div class='mb-2'>
+        <div
+            v-show='!state.organizing'
+            class='mb-2'
+        >
             <input
                 v-model='state.query'
                 class='form-control form-control-sm'
@@ -177,28 +191,28 @@
         </div>
 
         <div
-            v-if='state.loading'
+            v-if='!state.organizing && state.loading'
             class='text-secondary small py-3 text-center'
         >
             Loading icons…
         </div>
         <FavoritesBoard
-            v-else-if='state.selectedPack === FAVORITES_PACK'
+            v-else-if='!state.organizing && state.selectedPack === FAVORITES_PACK'
         />
         <div
-            v-else-if='!icons.length && state.query.trim()'
+            v-else-if='!state.organizing && !icons.length && state.query.trim()'
             class='text-secondary small py-3 text-center'
         >
             No icons match that search.
         </div>
         <div
-            v-else-if='!icons.length'
+            v-else-if='!state.organizing && !icons.length'
             class='text-secondary small py-3 text-center'
         >
             This pack has no icons.
         </div>
         <div
-            v-else
+            v-else-if='!state.organizing'
             :class='state.detailed ? "qpd-list" : "qpd-grid"'
         >
             <button
@@ -222,22 +236,6 @@
                         v-else
                         class='qpd-icon-missing'
                     >?</span>
-                    <span
-                        v-if='state.writable'
-                        class='qpd-star'
-                        :class='{ "qpd-star-on": isFavorite(icon) }'
-                        title='Toggle favorite'
-                        @click.stop='toggleFavorite(icon)'
-                    >
-                        <IconStarFilled
-                            v-if='isFavorite(icon)'
-                            :size='14'
-                        />
-                        <IconStar
-                            v-else
-                            :size='14'
-                        />
-                    </span>
                 </span>
                 <span
                     v-if='state.detailed'
@@ -251,14 +249,13 @@
 <script setup lang='ts'>
 import { computed } from 'vue';
 import {
-    IconStar,
-    IconStarFilled,
     IconLayoutGrid,
     IconListDetails,
     IconTrash,
     IconAdjustments,
 } from '@tabler/icons-vue';
 import FavoritesBoard from './FavoritesBoard.vue';
+import FavoritesEditor from './FavoritesEditor.vue';
 import {
     state,
     FAVORITES_PACK,
@@ -273,8 +270,6 @@ import {
     deletePoint,
     setDetailed,
     setOrganizing,
-    isFavorite,
-    toggleFavorite,
     packFolders,
     showFolderSelect,
     showSectionSelect,

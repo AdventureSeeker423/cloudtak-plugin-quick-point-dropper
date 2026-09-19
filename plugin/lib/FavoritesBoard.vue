@@ -2,7 +2,13 @@
     <div>
         <div
             v-if='state.organizing'
-            class='d-flex gap-2 mb-2'
+            class='qpd-org-help mb-2'
+        >
+            Drag icons to move them. Click a section name to rename it. Use Add icons to bring in more.
+        </div>
+        <div
+            v-if='state.organizing'
+            class='d-flex gap-2 mb-3'
         >
             <input
                 v-model='newSectionName'
@@ -20,7 +26,7 @@
                 <IconPlus
                     :size='16'
                 />
-                Add
+                Section
             </button>
         </div>
 
@@ -33,15 +39,15 @@
             </template>
             <template v-else>
                 No favorite icons yet.
-                <span v-if='state.writable'>Star icons from any pack to add them here.</span>
-                <span v-else>A system admin can star icons from any pack.</span>
+                <span v-if='state.writable'>Use Edit Favorites to add icons.</span>
+                <span v-else>A system admin can add icons to Favorites.</span>
             </template>
         </div>
 
         <section
             v-for='group in groups'
             :key='group.id ?? "unsorted"'
-            class='qpd-section'
+            class='qpd-section-card'
             :class='{ "qpd-section-over": dragOver === sectionKey(group) }'
             @dragover='onSectionDragOver(group, $event)'
             @drop.prevent='onSectionDrop(group)'
@@ -83,23 +89,17 @@
                         @keydown.escape.prevent='renamingId = null'
                         @blur='commitRename'
                     >
-                    <span
-                        v-else
-                        class='qpd-section-title'
-                    >{{ group.name }}</span>
                     <button
-                        v-if='renamingId !== group.id'
-                        class='btn btn-sm btn-ghost-secondary px-1 ms-auto'
+                        v-else
+                        class='qpd-section-title-btn'
                         type='button'
                         title='Rename section'
                         @click='startRename(group)'
                     >
-                        <IconPencil
-                            :size='14'
-                        />
+                        {{ group.name }}
                     </button>
                     <button
-                        class='btn btn-sm btn-ghost-danger px-1'
+                        class='btn btn-sm btn-ghost-danger px-1 ms-auto'
                         type='button'
                         title='Delete section'
                         @click='onDeleteSection(group.id, group.name)'
@@ -115,37 +115,50 @@
                 >{{ group.name }}</span>
             </div>
 
-            <div :class='iconListClass'>
+            <div
+                v-if='state.organizing && !group.icons.length'
+                class='qpd-empty-drop'
+            >
+                Drag icons here
+            </div>
+            <div
+                v-else
+                :class='iconListClass'
+            >
                 <div
                     v-for='icon in group.icons'
                     :key='icon.key'
                     class='qpd-fav-item'
-                    :class='{ "qpd-drop-before": dragOver === iconKey(icon) }'
+                    :class='{
+                        "qpd-drop-before": dragOver === iconKey(icon),
+                        "qpd-fav-item-org": state.organizing
+                    }'
+                    :draggable='state.organizing'
+                    @dragstart='onRowDragStart(icon, $event)'
+                    @dragend='onDragEnd'
                     @dragover='onIconDragOver(icon, $event)'
                     @drop.prevent.stop='onIconDrop(icon)'
                 >
-                    <button
+                    <span
                         v-if='state.organizing'
                         class='qpd-grip'
-                        type='button'
-                        title='Drag to reorder'
-                        draggable='true'
-                        @dragstart='onGripDragStart(icon, $event)'
-                        @dragend='onDragEnd'
-                        @click.stop
+                        title='Drag to move'
                     >
                         <IconGripVertical
                             :size='16'
                         />
-                    </button>
+                    </span>
                     <button
                         type='button'
                         :class='[
                             (state.organizing || state.detailed) ? "qpd-list-item" : "qpd-icon",
-                            { "qpd-icon-selected": state.selected?.key === icon.key }
+                            {
+                                "qpd-icon-selected": !state.organizing && state.selected?.key === icon.key,
+                                "qpd-list-item-static": state.organizing
+                            }
                         ]'
                         :title='icon.path || icon.name'
-                        @click='selectIcon(icon)'
+                        @click='onPick(icon)'
                     >
                         <span class='qpd-icon-thumb'>
                             <img
@@ -157,22 +170,6 @@
                                 v-else
                                 class='qpd-icon-missing'
                             >?</span>
-                            <span
-                                v-if='state.writable'
-                                class='qpd-star'
-                                :class='{ "qpd-star-on": isFavorite(icon) }'
-                                title='Toggle favorite'
-                                @click.stop='toggleFavorite(icon)'
-                            >
-                                <IconStarFilled
-                                    v-if='isFavorite(icon)'
-                                    :size='14'
-                                />
-                                <IconStar
-                                    v-else
-                                    :size='14'
-                                />
-                            </span>
                         </span>
                         <span
                             v-if='state.organizing || state.detailed'
@@ -188,6 +185,7 @@
                             :value='icon.sectionId || ""'
                             title='Move to section'
                             @click.stop
+                            @mousedown.stop
                             @change='onAssign(icon, $event)'
                         >
                             <option value=''>
@@ -223,6 +221,16 @@
                                 :size='16'
                             />
                         </button>
+                        <button
+                            class='btn btn-sm btn-ghost-danger px-1'
+                            type='button'
+                            title='Remove from favorites'
+                            @click.stop='toggleFavorite(icon)'
+                        >
+                            <IconStarFilled
+                                :size='14'
+                            />
+                        </button>
                     </div>
                 </div>
             </div>
@@ -233,10 +241,8 @@
 <script setup lang='ts'>
 import { computed, ref } from 'vue';
 import {
-    IconStar,
     IconStarFilled,
     IconPlus,
-    IconPencil,
     IconTrash,
     IconChevronUp,
     IconChevronDown,
@@ -245,7 +251,6 @@ import {
 import {
     state,
     selectIcon,
-    isFavorite,
     toggleFavorite,
     favoriteGroups,
     sortedSections,
@@ -278,6 +283,11 @@ function iconKey(icon: DisplayIcon): string {
 
 function sectionKey(group: FavoriteGroup): string {
     return `section:${group.id ?? 'unsorted'}`;
+}
+
+function onPick(icon: DisplayIcon): void {
+    if (state.organizing) return;
+    selectIcon(icon);
 }
 
 function onAddSection(): void {
@@ -325,7 +335,13 @@ function onAssign(icon: DisplayIcon, ev: Event): void {
     void assignIconSection(icon, value || null);
 }
 
-function onGripDragStart(icon: DisplayIcon, ev: DragEvent): void {
+function onRowDragStart(icon: DisplayIcon, ev: DragEvent): void {
+    if (!state.organizing) return;
+    const target = ev.target as HTMLElement | null;
+    if (target?.closest('select, button.btn-ghost-danger, button.btn-ghost-secondary')) {
+        ev.preventDefault();
+        return;
+    }
     dragging = icon;
     if (ev.dataTransfer) {
         ev.dataTransfer.effectAllowed = 'move';
@@ -374,37 +390,66 @@ function onSectionDrop(group: FavoriteGroup): void {
 </script>
 
 <style scoped>
-.qpd-section {
-    margin-bottom: 12px;
+.qpd-org-help {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--tblr-secondary, #667382);
+}
+.qpd-section-card {
+    margin-bottom: 10px;
+    padding: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-    padding: 2px;
+    background: rgba(0, 0, 0, 0.18);
 }
 .qpd-section-over {
-    outline: 1px dashed var(--tblr-primary, #206bc4);
-    background: rgba(32, 107, 196, 0.08);
+    outline: 2px dashed var(--tblr-primary, #206bc4);
+    background: rgba(32, 107, 196, 0.12);
 }
 .qpd-section-head {
     display: flex;
     align-items: center;
     gap: 2px;
-    margin-bottom: 6px;
-    padding: 2px 0;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
-.qpd-section-title {
-    font-size: 11px;
+.qpd-section-title,
+.qpd-section-title-btn {
+    font-size: 12px;
     font-weight: 650;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--tblr-secondary, #667382);
+    color: var(--tblr-secondary, #adb5bd);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-align: left;
+}
+.qpd-section-title-btn {
+    flex: 1;
+    border: 0;
+    background: transparent;
+    padding: 2px 4px;
+    border-radius: 4px;
+    cursor: text;
+}
+.qpd-section-title-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    color: inherit;
 }
 .qpd-rename {
     min-width: 0;
     flex: 1;
+}
+.qpd-empty-drop {
+    color: #6c7a89;
+    font-size: 12px;
+    text-align: center;
+    padding: 14px 8px;
+    border: 1px dashed rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
 }
 .qpd-grid {
     display: grid;
@@ -423,6 +468,13 @@ function onSectionDrop(group: FavoriteGroup): void {
     gap: 4px;
     border-radius: 6px;
 }
+.qpd-fav-item-org {
+    cursor: grab;
+    padding: 2px;
+}
+.qpd-fav-item-org:active {
+    cursor: grabbing;
+}
 .qpd-drop-before {
     box-shadow: inset 0 2px 0 var(--tblr-primary, #206bc4);
 }
@@ -433,20 +485,15 @@ function onSectionDrop(group: FavoriteGroup): void {
     justify-content: center;
     width: 22px;
     padding: 0;
-    border: 0;
-    background: transparent;
     color: #6c7a89;
-    cursor: grab;
-}
-.qpd-grip:active {
-    cursor: grabbing;
+    pointer-events: none;
 }
 .qpd-fav-tools {
     display: flex;
     align-items: center;
     gap: 2px;
     flex-shrink: 0;
-    max-width: 46%;
+    max-width: 52%;
 }
 .qpd-fav-tools .form-select {
     min-width: 0;
@@ -479,6 +526,9 @@ function onSectionDrop(group: FavoriteGroup): void {
     background: transparent;
     color: inherit;
     cursor: pointer;
+}
+.qpd-list-item-static {
+    cursor: grab;
 }
 .qpd-icon:hover,
 .qpd-list-item:hover {
@@ -537,7 +587,8 @@ function onSectionDrop(group: FavoriteGroup): void {
     font-size: 13px;
     line-height: 1.3;
     text-align: left;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 </style>
