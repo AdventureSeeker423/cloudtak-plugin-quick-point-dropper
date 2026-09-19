@@ -53,7 +53,7 @@
         </div>
 
         <div
-            class='row mx-0 d-flex flex-row overflow-y-auto overflow-x-hidden align-content-start flex-grow-1'
+            class='row mx-0 d-flex flex-row overflow-y-auto overflow-x-hidden align-content-start flex-grow-1 pt-3'
         >
             <TablerLoading
                 v-if='loading'

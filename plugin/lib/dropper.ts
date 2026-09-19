@@ -9,12 +9,20 @@ import { useMapStore } from '../../../src/stores/map.ts';
 import IconsetManager from '../../../src/base/iconset.ts';
 import Icon from '../../../src/base/icon.ts';
 import {
+    STANDARD_PACK,
+    standardIcons,
+    matchStandardType,
+} from './standard-icons.ts';
+import {
     listFavorites,
     addFavorite,
     removeFavorite,
+    saveLayout,
     type FavoriteIcon,
+    type FavoriteSection,
 } from './favorites-client.ts';
 
+export { STANDARD_PACK } from './standard-icons.ts';
 export const ROUTE_NAME = 'home-menu-plugin-quick-point-dropper';
 export const MENU_KEY = 'quick-point-dropper';
 export const BOTTOM_BAR_KEY = 'qpd-bottom-bar';
@@ -36,6 +44,16 @@ export interface DisplayIcon {
     name: string;
     key: string;
     url: string;
+    sectionId?: string | null;
+    cotType?: string;
+    legacyType?: string;
+    keywords?: string;
+}
+
+export interface FavoriteGroup {
+    id: string | null;
+    name: string;
+    icons: DisplayIcon[];
 }
 
 export interface EditingPoint {
@@ -56,8 +74,12 @@ export const state = reactive({
     packs: [] as IconPack[],
     selectedPack: FAVORITES_PACK,
     selectedFolder: ALL_FOLDERS,
+    selectedSection: ALL_FOLDERS,
+    organizing: false,
+    query: '',
     icons: [] as DisplayIcon[],
     favorites: [] as FavoriteIcon[],
+    sections: [] as FavoriteSection[],
     selected: null as DisplayIcon | null,
     editing: null as EditingPoint | null,
 });
@@ -111,23 +133,270 @@ export function hasUngroupedIcons(icons: DisplayIcon[]): boolean {
     return icons.some((icon) => !iconFolder(icon.path));
 }
 
-/** Hide the folder dropdown when the pack has no subfolders. */
+/** Hide the folder dropdown unless the pack has two or more subfolders. Favorites use sections instead. */
 export function showFolderSelect(icons: DisplayIcon[]): boolean {
-    return packFolders(icons).length >= 1;
+    if (state.selectedPack === FAVORITES_PACK || state.selectedPack === STANDARD_PACK) return false;
+    return packFolders(icons).length >= 2;
+}
+
+export function iconMatchesQuery(icon: DisplayIcon): boolean {
+    const q = state.query.trim().toLowerCase();
+    if (!q) return true;
+    const hay = [icon.name, icon.path, icon.keywords, icon.cotType, icon.legacyType]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+    return hay.includes(q);
 }
 
 export function visibleIcons(): DisplayIcon[] {
-    if (!showFolderSelect(state.icons) || state.selectedFolder === ALL_FOLDERS) {
-        return state.icons;
+    let icons = state.icons;
+    if (showFolderSelect(state.icons) && state.selectedFolder !== ALL_FOLDERS) {
+        if (state.selectedFolder === UNGROUPED_FOLDER) {
+            icons = icons.filter((icon) => !iconFolder(icon.path));
+        } else {
+            icons = icons.filter((icon) => iconFolder(icon.path) === state.selectedFolder);
+        }
     }
-    if (state.selectedFolder === UNGROUPED_FOLDER) {
-        return state.icons.filter((icon) => !iconFolder(icon.path));
-    }
-    return state.icons.filter((icon) => iconFolder(icon.path) === state.selectedFolder);
+    return icons.filter(iconMatchesQuery);
 }
 
 export function selectFolder(folder: string): void {
     state.selectedFolder = folder;
+}
+
+export function selectSection(sectionId: string): void {
+    state.selectedSection = sectionId;
+}
+
+export function setOrganizing(value: boolean): void {
+    state.organizing = !!value && state.writable;
+}
+
+export function sortedSections(): FavoriteSection[] {
+    return [...state.sections].sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
+}
+
+export function hasUnsortedFavorites(): boolean {
+    return state.favorites.some((f) => !f.sectionId);
+}
+
+/** Show a section filter when Favorites has more than one group. */
+export function showSectionSelect(): boolean {
+    if (state.selectedPack !== FAVORITES_PACK) return false;
+    return state.sections.length > 1 || (state.sections.length === 1 && hasUnsortedFavorites());
+}
+
+export function favoriteGroups(): FavoriteGroup[] {
+    const bySection = new Map<string, DisplayIcon[]>();
+    const unsorted: DisplayIcon[] = [];
+    const searching = !!state.query.trim();
+    for (const icon of state.icons) {
+        if (!iconMatchesQuery(icon)) continue;
+        if (icon.sectionId) {
+            const list = bySection.get(icon.sectionId) || [];
+            list.push(icon);
+            bySection.set(icon.sectionId, list);
+        } else {
+            unsorted.push(icon);
+        }
+    }
+
+    const groups: FavoriteGroup[] = [];
+    for (const section of sortedSections()) {
+        const icons = bySection.get(section.id) || [];
+        if (icons.length || (state.organizing && !searching)) {
+            groups.push({ id: section.id, name: section.name, icons });
+        }
+    }
+    if (state.sections.length && (unsorted.length || (state.organizing && !searching))) {
+        groups.push({ id: null, name: 'Unsorted', icons: unsorted });
+    } else if (!state.sections.length && unsorted.length) {
+        groups.push({ id: null, name: '', icons: unsorted });
+    }
+
+    if (state.selectedSection === ALL_FOLDERS) return groups;
+    if (state.selectedSection === UNGROUPED_FOLDER) {
+        return groups.filter((g) => g.id === null);
+    }
+    return groups.filter((g) => g.id === state.selectedSection);
+}
+
+function favKey(iconset: string, path: string): string {
+    return `${iconset}:${path}`;
+}
+
+function syncIconsFromFavorites(): void {
+    const iconByKey = new Map(state.icons.map((i) => [i.key, i]));
+    const next: DisplayIcon[] = [];
+    for (const fav of state.favorites) {
+        const icon = iconByKey.get(favKey(fav.iconset, fav.path));
+        if (!icon) continue;
+        icon.sectionId = fav.sectionId;
+        icon.name = fav.name || icon.name;
+        next.push(icon);
+    }
+    state.icons = next;
+    if (state.selected) {
+        const selectedKey = state.selected.key;
+        state.selected = state.icons.find((i) => i.key === selectedKey) ?? state.selected;
+    }
+}
+
+let layoutLock: Promise<void> = Promise.resolve();
+
+function persistLayout(): Promise<void> {
+    if (!state.writable) return Promise.resolve();
+    const run = async (): Promise<void> => {
+        const r = await saveLayout({
+            sections: sortedSections().map((s) => ({ id: s.id, name: s.name })),
+            items: state.favorites.map((f) => ({
+                iconset: f.iconset,
+                path: f.path,
+                sectionId: f.sectionId || '',
+            })),
+        });
+        state.sections = r.sections;
+        state.favorites = r.favorites;
+        syncIconsFromFavorites();
+    };
+    layoutLock = layoutLock.then(run, run).catch((err) => {
+        state.error = err instanceof Error ? err.message : String(err);
+    });
+    return layoutLock;
+}
+
+export async function createSection(name: string): Promise<void> {
+    if (!state.writable) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    state.sections = [
+        ...sortedSections(),
+        { id: crypto.randomUUID(), name: trimmed, sort: state.sections.length },
+    ];
+    await persistLayout();
+}
+
+export async function renameSection(id: string, name: string): Promise<void> {
+    if (!state.writable) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    state.sections = state.sections.map((s) => (s.id === id ? { ...s, name: trimmed } : s));
+    await persistLayout();
+}
+
+export async function deleteSection(id: string): Promise<void> {
+    if (!state.writable) return;
+    state.sections = state.sections.filter((s) => s.id !== id);
+    state.favorites = state.favorites.map((f) => (
+        f.sectionId === id ? { ...f, sectionId: null } : f
+    ));
+    if (state.selectedSection === id) state.selectedSection = ALL_FOLDERS;
+    syncIconsFromFavorites();
+    await persistLayout();
+}
+
+export async function moveSection(id: string, dir: -1 | 1): Promise<void> {
+    if (!state.writable) return;
+    const next = sortedSections();
+    const i = next.findIndex((s) => s.id === id);
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= next.length) return;
+    const swap = next[i];
+    next[i] = next[j];
+    next[j] = swap;
+    state.sections = next.map((s, sort) => ({ ...s, sort }));
+    await persistLayout();
+}
+
+function sameFav(a: { iconset: string; path: string }, b: { iconset: string; path: string }): boolean {
+    return a.iconset === b.iconset && a.path === b.path;
+}
+
+function lastIndexWhere<T>(arr: T[], pred: (item: T) => boolean): number {
+    for (let i = arr.length - 1; i >= 0; i--) {
+        if (pred(arr[i])) return i;
+    }
+    return -1;
+}
+
+export async function moveIcon(icon: DisplayIcon, dir: -1 | 1): Promise<void> {
+    if (!state.writable) return;
+    const sectionId = icon.sectionId || null;
+    const indexed = state.favorites.map((f, idx) => ({ f, idx }));
+    const inSection = indexed.filter(({ f }) => (f.sectionId || null) === sectionId);
+    const i = inSection.findIndex(({ f }) => sameFav(f, icon));
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= inSection.length) return;
+    const next = state.favorites.slice();
+    const from = inSection[i].idx;
+    const to = inSection[j].idx;
+    const tmp = next[from];
+    next[from] = next[to];
+    next[to] = tmp;
+    state.favorites = next.map((f, sort) => ({ ...f, sort }));
+    syncIconsFromFavorites();
+    await persistLayout();
+}
+
+export async function assignIconSection(icon: DisplayIcon, sectionId: string | null): Promise<void> {
+    if (!state.writable) return;
+    const current = state.favorites.find((f) => sameFav(f, icon));
+    if (!current) return;
+    const rest = state.favorites.filter((f) => !sameFav(f, icon));
+    const entry: FavoriteIcon = { ...current, sectionId };
+    let insertAt = lastIndexWhere(rest, (f) => (f.sectionId || null) === sectionId);
+    if (insertAt < 0) {
+        if (!sectionId) {
+            insertAt = rest.length;
+        } else {
+            const sectionOrder = sortedSections().map((s) => s.id);
+            const targetPos = sectionOrder.indexOf(sectionId);
+            insertAt = rest.length;
+            for (let i = rest.length - 1; i >= 0; i--) {
+                const sid = rest[i].sectionId;
+                if (!sid) continue;
+                const pos = sectionOrder.indexOf(sid);
+                if (pos >= 0 && pos <= targetPos) {
+                    insertAt = i + 1;
+                    break;
+                }
+                if (pos >= 0 && pos > targetPos) insertAt = i;
+            }
+        }
+    } else {
+        insertAt += 1;
+    }
+    rest.splice(insertAt, 0, entry);
+    state.favorites = rest.map((f, sort) => ({ ...f, sort }));
+    syncIconsFromFavorites();
+    await persistLayout();
+}
+
+/** Place `icon` in `sectionId`, before `before` if given, otherwise at the end of the section. */
+export async function placeIcon(
+    icon: DisplayIcon,
+    sectionId: string | null,
+    before?: DisplayIcon | null,
+): Promise<void> {
+    if (!state.writable) return;
+    if (before && before.key === icon.key) return;
+    const current = state.favorites.find((f) => sameFav(f, icon));
+    if (!current) return;
+    const rest = state.favorites.filter((f) => !sameFav(f, icon));
+    const entry: FavoriteIcon = { ...current, sectionId };
+    let insertAt = rest.length;
+    if (before) {
+        const idx = rest.findIndex((f) => sameFav(f, before));
+        if (idx >= 0) insertAt = idx;
+    } else {
+        const last = lastIndexWhere(rest, (f) => (f.sectionId || null) === sectionId);
+        insertAt = last >= 0 ? last + 1 : rest.length;
+    }
+    rest.splice(insertAt, 0, entry);
+    state.favorites = rest.map((f, sort) => ({ ...f, sort }));
+    syncIconsFromFavorites();
+    await persistLayout();
 }
 
 function iconKey(iconset: string, path: string): string {
@@ -150,10 +419,9 @@ function clearSaveTimer(): void {
 
 async function persistEdit(): Promise<void> {
     if (!state.editing) return;
-    const icon = state.selected?.key || state.editing.icon;
-    if (!icon) return;
+    if (!state.selected?.cotType && !(state.selected?.key || state.editing.icon)) return;
     try {
-        await upsertCot({ ...state.editing, icon });
+        await upsertCot({ ...state.editing, icon: state.selected?.key || state.editing.icon });
     } catch (err) {
         state.error = err instanceof Error ? err.message : String(err);
     }
@@ -171,8 +439,46 @@ function scheduleEditSave(): void {
 watch(() => state.title, scheduleEditSave);
 watch(() => state.remarks, scheduleEditSave);
 
+let preEdit: { title: string; remarks: string } | null = null;
+
+function snapshotPreEdit(): void {
+    if (state.editing || preEdit) return;
+    preEdit = { title: state.title, remarks: state.remarks };
+}
+
+function restorePreEdit(): void {
+    if (!preEdit) return;
+    suppressSave = true;
+    state.title = preEdit.title;
+    state.remarks = preEdit.remarks;
+    preEdit = null;
+    queueMicrotask(() => {
+        suppressSave = false;
+    });
+}
+
+export async function cancelEdit(): Promise<void> {
+    if (!state.editing) return;
+    clearSaveTimer();
+    try {
+        await persistEdit();
+    } catch (err) {
+        state.error = err instanceof Error ? err.message : String(err);
+    }
+    state.editing = null;
+    restorePreEdit();
+    if (state.selected) startDrop();
+}
+
 const onKeyDown = (e: KeyboardEvent): void => {
     if (e.key !== 'Escape') return;
+    if (!pluginRouteActive()) return;
+    if (state.editing) {
+        e.preventDefault();
+        e.stopPropagation();
+        void cancelEdit();
+        return;
+    }
     if (!state.dropping) return;
     e.preventDefault();
     e.stopPropagation();
@@ -226,6 +532,7 @@ function startDrop(): void {
     if (!state.selected) return;
     clearSaveTimer();
     state.editing = null;
+    preEdit = null;
     const was = state.dropping;
     state.dropping = true;
     setCursor('crosshair');
@@ -252,6 +559,7 @@ export async function deletePoint(): Promise<void> {
         const mapStore = useMapStore(api.pinia);
         await mapStore.worker.db.remove(id);
         state.editing = null;
+        preEdit = null;
     } catch (err) {
         state.error = err instanceof Error ? err.message : String(err);
     }
@@ -295,10 +603,12 @@ async function getFeature(uid: string): Promise<{
 
 async function upsertCot(opts: { id: string; lng: number; lat: number; icon?: string }): Promise<void> {
     if (!api) return;
-    const icon = state.selected?.key || opts.icon;
-    if (!icon) return;
+    const selected = state.selected;
+    const cotType = selected?.cotType;
+    const icon = selected && !cotType ? selected.key : (!cotType ? opts.icon : undefined);
+    if (!cotType && !icon) return;
     const mapStore = useMapStore(api.pinia);
-    const callsign = state.title.trim() || state.selected?.name || 'Point';
+    const callsign = state.title.trim() || selected?.name || 'Point';
     const remarks = state.remarks.trim();
 
     const feat = {
@@ -317,10 +627,16 @@ async function upsertCot(opts: { id: string; lng: number; lat: number; icon?: st
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const norm: any = await normalize_geojson(feat as any);
-    norm.properties.type = 'u-d-p';
     norm.properties.how = 'h-g-i-g-o';
-    norm.properties.icon = icon;
     norm.properties.archived = true;
+    if (cotType) {
+        norm.properties.type = selected?.legacyType || cotType;
+        norm.properties['marker-opacity'] = 1;
+        delete norm.properties.icon;
+    } else {
+        norm.properties.type = 'u-d-p';
+        norm.properties.icon = icon;
+    }
     await mapStore.worker.db.add(JSON.parse(JSON.stringify(norm)), { authored: true });
 }
 
@@ -338,10 +654,12 @@ async function beginEdit(uid: string): Promise<void> {
         return;
     }
 
+    snapshotPreEdit();
     suppressSave = true;
     state.title = String(props.callsign || '');
     state.remarks = String(props.remarks || '');
     const icon = typeof props.icon === 'string' ? props.icon : '';
+    const cotType = typeof props.type === 'string' ? props.type : '';
     state.editing = {
         id: String(feat.id || uid),
         lng: Number(geom.coordinates[0]),
@@ -349,7 +667,10 @@ async function beginEdit(uid: string): Promise<void> {
         icon: icon || undefined,
     };
 
-    if (icon) {
+    const standard = matchStandardType(cotType);
+    if (standard) {
+        state.selected = { ...standard };
+    } else if (icon) {
         const sep = icon.indexOf(':');
         if (sep > 0) {
             const iconset = icon.slice(0, sep);
@@ -387,9 +708,15 @@ const onMapClick = (e: MapClickEvent): void => {
     }
 
     const uid = cotUidFromClick(e.point);
-    if (!uid) return;
-    void beginEdit(uid);
-    clearRadial();
+    if (uid) {
+        void beginEdit(uid);
+        clearRadial();
+        return;
+    }
+    if (state.editing) {
+        void cancelEdit();
+        clearRadial();
+    }
 };
 
 async function displayFromDexie(iconset: string, path: string): Promise<DisplayIcon | null> {
@@ -433,6 +760,17 @@ async function iconsForFavorites(): Promise<DisplayIcon[]> {
     revokeThumbs();
     const out: DisplayIcon[] = [];
     for (const fav of state.favorites) {
+        if (fav.iconset === STANDARD_PACK) {
+            const std = standardIcons().find((i) => i.path === fav.path);
+            if (std) {
+                out.push({
+                    ...std,
+                    name: fav.name || std.name,
+                    sectionId: fav.sectionId,
+                });
+            }
+            continue;
+        }
         let icon = await displayFromDexie(fav.iconset, fav.path);
         if (!icon) {
             try {
@@ -442,6 +780,7 @@ async function iconsForFavorites(): Promise<DisplayIcon[]> {
         }
         if (icon) {
             icon.name = fav.name || icon.name;
+            icon.sectionId = fav.sectionId;
             out.push(icon);
         } else {
             out.push({
@@ -450,6 +789,7 @@ async function iconsForFavorites(): Promise<DisplayIcon[]> {
                 name: fav.name || iconName(fav.path),
                 key: iconKey(fav.iconset, fav.path),
                 url: '',
+                sectionId: fav.sectionId,
             });
         }
     }
@@ -459,12 +799,19 @@ async function iconsForFavorites(): Promise<DisplayIcon[]> {
 export async function selectPack(uid: string): Promise<void> {
     state.selectedPack = uid;
     state.selectedFolder = ALL_FOLDERS;
+    state.selectedSection = ALL_FOLDERS;
+    if (uid !== FAVORITES_PACK) state.organizing = false;
     saveLastPack(uid);
     state.loading = true;
     try {
-        state.icons = uid === FAVORITES_PACK
-            ? await iconsForFavorites()
-            : await iconsForPack(uid);
+        if (uid === FAVORITES_PACK) {
+            state.icons = await iconsForFavorites();
+        } else if (uid === STANDARD_PACK) {
+            revokeThumbs();
+            state.icons = standardIcons();
+        } else {
+            state.icons = await iconsForPack(uid);
+        }
         const folders = packFolders(state.icons);
         const ungrouped = hasUngroupedIcons(state.icons);
         state.selectedFolder = folders.length === 1 && !ungrouped
@@ -490,6 +837,8 @@ export async function toggleFavorite(icon: DisplayIcon): Promise<void> {
         iconset: icon.iconset,
         path: icon.path,
         name: icon.name,
+        sectionId: null,
+        sort: state.favorites.reduce((max, f) => Math.max(max, f.sort), -1) + 1,
     };
 
     if (existed) {
@@ -532,17 +881,21 @@ async function load(): Promise<void> {
             IconsetManager.list(),
             listFavorites().catch((err) => {
                 console.warn('QPD: failed to load favorites', err);
-                return { favorites: [] as FavoriteIcon[], writable: false };
+                return { favorites: [] as FavoriteIcon[], sections: [] as FavoriteSection[], writable: false };
             }),
         ]);
         if (!api) return;
 
         state.packs = packs.map((p) => ({ uid: p.uid, name: p.name }));
         state.favorites = favs.favorites;
+        state.sections = favs.sections;
         state.writable = favs.writable;
+        if (!state.writable) state.organizing = false;
 
         const last = loadLastPack();
-        const packExists = last === FAVORITES_PACK || state.packs.some((p) => p.uid === last);
+        const packExists = last === FAVORITES_PACK
+            || last === STANDARD_PACK
+            || state.packs.some((p) => p.uid === last);
         await selectPack(packExists ? last : FAVORITES_PACK);
     } catch (err) {
         state.error = err instanceof Error ? err.message : String(err);
@@ -570,7 +923,12 @@ export function init(pluginAPI: PluginAPI): void {
     window.addEventListener('keydown', onKeyDown, true);
 
     const unhook = api.router.afterEach((to) => {
-        if (to.name !== ROUTE_NAME) stopDrop();
+        if (to.name !== ROUTE_NAME) {
+            stopDrop();
+            clearSaveTimer();
+            state.editing = null;
+            preEdit = null;
+        }
     });
     if (typeof unhook === 'function') removeAfterEach = unhook;
 
@@ -580,6 +938,8 @@ export function init(pluginAPI: PluginAPI): void {
 export function destroy(): void {
     clearSaveTimer();
     stopDrop();
+    state.editing = null;
+    preEdit = null;
     removeAfterEach?.();
     removeAfterEach = undefined;
     try { api?.map.off('click', onMapClick as never); } catch { /* map not ready */ }

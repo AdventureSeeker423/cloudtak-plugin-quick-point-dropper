@@ -1,5 +1,5 @@
 <template>
-    <div class='col-12 px-2 pb-3'>
+    <div class='col-12 px-2 pt-2 pb-3'>
         <div
             v-if='state.editing'
             class='d-flex mb-2'
@@ -57,6 +57,9 @@
                 <option :value='FAVORITES_PACK'>
                     Favorites
                 </option>
+                <option :value='STANDARD_PACK'>
+                    Standard
+                </option>
                 <option
                     v-for='pack in state.packs'
                     :key='pack.uid'
@@ -91,6 +94,42 @@
                     Ungrouped
                 </option>
             </select>
+            <select
+                v-if='sectionSelectVisible'
+                class='form-select form-select-sm'
+                :value='state.selectedSection'
+                @change='onSectionChange'
+            >
+                <option :value='ALL_FOLDERS'>
+                    All
+                </option>
+                <option
+                    v-for='section in sections'
+                    :key='section.id'
+                    :value='section.id'
+                >
+                    {{ section.name }}
+                </option>
+                <option
+                    v-if='unsortedFavorites'
+                    :value='UNGROUPED_FOLDER'
+                >
+                    Unsorted
+                </option>
+            </select>
+            <button
+                v-if='state.writable && state.selectedPack === FAVORITES_PACK'
+                type='button'
+                class='btn btn-sm flex-shrink-0'
+                :class='state.organizing ? "btn-primary" : "btn-outline-secondary"'
+                :title='state.organizing ? "Done organizing" : "Organize favorites"'
+                @click='setOrganizing(!state.organizing)'
+            >
+                <IconAdjustments
+                    :size='18'
+                />
+                <span class='ms-1'>{{ state.organizing ? 'Done' : 'Organize' }}</span>
+            </button>
             <button
                 type='button'
                 class='btn btn-sm btn-outline-secondary flex-shrink-0'
@@ -127,24 +166,36 @@
             />
         </div>
 
+        <div class='mb-2'>
+            <input
+                v-model='state.query'
+                class='form-control form-control-sm'
+                type='search'
+                placeholder='Search icons'
+                aria-label='Search icons'
+            >
+        </div>
+
         <div
             v-if='state.loading'
             class='text-secondary small py-3 text-center'
         >
             Loading icons…
         </div>
+        <FavoritesBoard
+            v-else-if='state.selectedPack === FAVORITES_PACK'
+        />
+        <div
+            v-else-if='!icons.length && state.query.trim()'
+            class='text-secondary small py-3 text-center'
+        >
+            No icons match that search.
+        </div>
         <div
             v-else-if='!icons.length'
             class='text-secondary small py-3 text-center'
         >
-            <template v-if='state.selectedPack === FAVORITES_PACK'>
-                No favorite icons yet.
-                <span v-if='state.writable'>Star icons from any pack to add them here.</span>
-                <span v-else>A system admin can star icons from any pack.</span>
-            </template>
-            <template v-else>
-                This pack has no icons.
-            </template>
+            This pack has no icons.
         </div>
         <div
             v-else
@@ -205,23 +256,31 @@ import {
     IconLayoutGrid,
     IconListDetails,
     IconTrash,
+    IconAdjustments,
 } from '@tabler/icons-vue';
+import FavoritesBoard from './FavoritesBoard.vue';
 import {
     state,
     FAVORITES_PACK,
+    STANDARD_PACK,
     ALL_FOLDERS,
     UNGROUPED_FOLDER,
     selectPack,
     selectFolder,
+    selectSection,
     selectIcon,
     stopDrop,
     deletePoint,
     setDetailed,
+    setOrganizing,
     isFavorite,
     toggleFavorite,
     packFolders,
     showFolderSelect,
+    showSectionSelect,
     hasUngroupedIcons,
+    hasUnsortedFavorites,
+    sortedSections,
     visibleIcons,
 } from './dropper.ts';
 
@@ -232,6 +291,9 @@ defineProps<{
 const folders = computed(() => packFolders(state.icons));
 const folderSelectVisible = computed(() => showFolderSelect(state.icons));
 const ungrouped = computed(() => hasUngroupedIcons(state.icons));
+const sections = computed(() => sortedSections());
+const sectionSelectVisible = computed(() => showSectionSelect());
+const unsortedFavorites = computed(() => hasUnsortedFavorites());
 const icons = computed(() => visibleIcons());
 
 function onPackChange(ev: Event): void {
@@ -241,6 +303,10 @@ function onPackChange(ev: Event): void {
 
 function onFolderChange(ev: Event): void {
     selectFolder((ev.target as HTMLSelectElement).value);
+}
+
+function onSectionChange(ev: Event): void {
+    selectSection((ev.target as HTMLSelectElement).value);
 }
 </script>
 
