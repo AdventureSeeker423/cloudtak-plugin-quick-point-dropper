@@ -390,7 +390,7 @@
 </template>
 
 <script setup lang='ts'>
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
     IconLayoutGrid,
     IconListDetails,
@@ -417,6 +417,8 @@ import {
     stopChangeIcon,
     toggleMove,
     toggleChangeIcon,
+    startMove,
+    startChangeIcon,
     deletePoint,
     setDetailed,
     setOrganizing,
@@ -505,7 +507,12 @@ watch(titleInput, (el) => {
     bindTitleInput(el);
 }, { immediate: true });
 
+onMounted(() => {
+    window.addEventListener('keydown', onPluginKey, true);
+});
+
 onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onPluginKey, true);
     bindTitleInput(null);
 });
 
@@ -561,6 +568,67 @@ function onDeleteClick(): void {
     }
     confirmDelete.value = false;
     void deletePoint();
+}
+
+function isTypingTarget(el: EventTarget | null): boolean {
+    if (!(el instanceof HTMLElement)) return false;
+    const tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    return el.isContentEditable;
+}
+
+function isPrintableKey(ev: KeyboardEvent): boolean {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return false;
+    if (ev.isComposing) return false;
+    return ev.key.length === 1;
+}
+
+function typeIntoTitle(ch: string): void {
+    confirmDelete.value = false;
+    state.title = ch;
+    void nextTick(() => {
+        const el = titleInput.value;
+        if (!el) return;
+        el.focus({ preventScroll: true });
+        const end = el.value.length;
+        el.setSelectionRange(end, end);
+    });
+}
+
+function onPluginKey(ev: KeyboardEvent): void {
+    if (state.organizing || !state.editing) return;
+    if (isTypingTarget(ev.target)) return;
+
+    if (ev.ctrlKey && !ev.altKey && !ev.metaKey) {
+        const key = ev.key.toLowerCase();
+        if (key === 'm') {
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            confirmDelete.value = false;
+            startMove();
+            return;
+        }
+        if (key === 'i') {
+            ev.preventDefault();
+            ev.stopImmediatePropagation();
+            confirmDelete.value = false;
+            startChangeIcon();
+            return;
+        }
+    }
+
+    if (ev.key === 'Delete' || ev.key === 'Backspace') {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        onDeleteClick();
+        return;
+    }
+
+    if (isPrintableKey(ev)) {
+        ev.preventDefault();
+        ev.stopImmediatePropagation();
+        typeIntoTitle(ev.key);
+    }
 }
 
 function onEnumerateToggle(ev: Event): void {
