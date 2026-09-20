@@ -102,23 +102,6 @@ export function standardIcons(): StandardIcon[] {
     return STANDARD_ICONS.map((icon) => ({ ...icon }));
 }
 
-/** Default Favorites when the shared list is empty. */
-export function defaultFavorites(): Array<{
-    iconset: typeof STANDARD_PACK;
-    path: string;
-    name: string;
-    sectionId: null;
-    sort: number;
-}> {
-    return STANDARD_ICONS.map((icon, sort) => ({
-        iconset: icon.iconset,
-        path: icon.path,
-        name: icon.name,
-        sectionId: null,
-        sort,
-    }));
-}
-
 export function matchStandardType(type: string): StandardIcon | undefined {
     const value = type.trim();
     if (!value) return undefined;

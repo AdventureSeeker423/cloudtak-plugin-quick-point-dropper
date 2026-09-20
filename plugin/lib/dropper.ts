@@ -12,7 +12,6 @@ import Icon from '../../../src/base/icon.ts';
 import {
     STANDARD_PACK,
     standardIcons,
-    defaultFavorites,
     matchStandardType,
 } from './standard-icons.ts';
 import { parseLatLng, formatLatLng, isCoordMode, type CoordMode } from './coords.ts';
@@ -1454,28 +1453,13 @@ export async function toggleFavorite(icon: DisplayIcon): Promise<void> {
     }
 }
 
-async function persistSeededFavorites(): Promise<void> {
-    const toSeed = state.favorites.slice();
-    for (const fav of toSeed) {
-        try {
-            await addFavorite(fav);
-        } catch (err) {
-            console.warn('QPD: failed to seed favorite', fav.path, err);
-        }
-    }
-}
-
 async function load(): Promise<void> {
     state.loading = true;
     state.error = '';
     try {
-        let favoritesLoaded = false;
         const [packs, favs] = await Promise.all([
             IconsetManager.list(),
-            listFavorites().then((r) => {
-                favoritesLoaded = true;
-                return r;
-            }).catch((err) => {
+            listFavorites().catch((err) => {
                 console.warn('QPD: failed to load favorites', err);
                 state.error = err instanceof Error ? err.message : 'Could not load favorites';
                 return {
@@ -1488,12 +1472,10 @@ async function load(): Promise<void> {
         if (!api) return;
 
         state.packs = packs.map((p) => ({ uid: p.uid, name: p.name }));
-        const empty = !favs.favorites.length;
-        state.favorites = empty ? defaultFavorites() : favs.favorites;
+        state.favorites = favs.favorites;
         state.sections = favs.sections;
         state.writable = favs.writable;
         if (!state.writable) state.organizing = false;
-        if (empty && favoritesLoaded && state.writable) void persistSeededFavorites();
 
         const last = loadLastPack();
         const packExists = last === FAVORITES_PACK

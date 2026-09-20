@@ -81,19 +81,33 @@ const DEFAULT_FAVORITES = [
     { iconset: '__standard__', path: 'neutral', name: 'Neutral Point' },
 ] as const;
 
+const META_DEFAULTS_SEEDED = 'defaults_seeded';
+
 async function seedDefaultFavorites(config: ConfigStateless): Promise<void> {
+    const marked = await query<{ value: string }>(config, sql`
+        SELECT value FROM qpd_meta WHERE key = ${META_DEFAULTS_SEEDED}
+    `);
+    if (marked.length) return;
+
     const existing = await query<{ iconset: string }>(config, sql`
         SELECT iconset FROM qpd_favorites LIMIT 1
     `);
-    if (existing.length) return;
-    for (let i = 0; i < DEFAULT_FAVORITES.length; i++) {
-        const icon = DEFAULT_FAVORITES[i];
-        await config.pg.execute(sql`
-            INSERT INTO qpd_favorites (iconset, path, name, created_by, section_id, sort)
-            VALUES (${icon.iconset}, ${icon.path}, ${icon.name}, NULL, NULL, ${i})
-            ON CONFLICT (iconset, path) DO NOTHING
-        `);
+    if (!existing.length) {
+        for (let i = 0; i < DEFAULT_FAVORITES.length; i++) {
+            const icon = DEFAULT_FAVORITES[i];
+            await config.pg.execute(sql`
+                INSERT INTO qpd_favorites (iconset, path, name, created_by, section_id, sort)
+                VALUES (${icon.iconset}, ${icon.path}, ${icon.name}, NULL, NULL, ${i})
+                ON CONFLICT (iconset, path) DO NOTHING
+            `);
+        }
     }
+
+    await config.pg.execute(sql`
+        INSERT INTO qpd_meta (key, value)
+        VALUES (${META_DEFAULTS_SEEDED}, ${'1'})
+        ON CONFLICT (key) DO NOTHING
+    `);
 }
 
 async function readLayout(config: ConfigStateless): Promise<{
@@ -140,6 +154,12 @@ async function bootstrap(config: ConfigStateless): Promise<void> {
     await config.pg.execute(sql`
         ALTER TABLE qpd_favorites
         ADD COLUMN IF NOT EXISTS sort INTEGER NOT NULL DEFAULT 0
+    `);
+    await config.pg.execute(sql`
+        CREATE TABLE IF NOT EXISTS qpd_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
     `);
     await config.pg.execute(sql`
         WITH numbered AS (
