@@ -272,7 +272,7 @@ export function setOrganizing(value: boolean): void {
         preEdit = null;
         state.selected = null;
         state.selectedSection = ALL_FOLDERS;
-        state.editTab = 'add';
+        state.editTab = state.favorites.length ? 'arrange' : 'add';
         state.organizing = true;
         void (async () => {
             await selectPack(FAVORITES_PACK, { remember: false });
