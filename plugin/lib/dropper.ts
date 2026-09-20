@@ -14,6 +14,7 @@ import {
     standardIcons,
     matchStandardType,
 } from './standard-icons.ts';
+import { parseLatLng } from './coords.ts';
 import {
     listFavorites,
     addFavorite,
@@ -1053,6 +1054,55 @@ async function upsertCot(opts: {
         }
     }
     if (opts.enumerate) bumpEnumerate();
+}
+
+function panToIfNeeded(lng: number, lat: number): void {
+    const map = api?.map as {
+        getBounds?: () => { contains?: (pt: [number, number]) => boolean };
+        panTo?: (pt: [number, number]) => void;
+        flyTo?: (opts: { center: [number, number] }) => void;
+    } | undefined;
+    if (!map) return;
+    try {
+        const pt: [number, number] = [lng, lat];
+        if (map.getBounds?.()?.contains?.(pt)) return;
+        if (map.panTo) map.panTo(pt);
+        else map.flyTo?.({ center: pt });
+    } catch { /* map not ready */ }
+}
+
+/** Drop the selected icon at coordinates found in `raw`. Non-coordinate text is ignored. */
+export async function dropAtCoords(raw: string): Promise<{ ok: boolean; text: string; error: string }> {
+    const parsed = parseLatLng(raw);
+    if (!parsed) {
+        const error = raw.trim() ? 'No coordinates found' : '';
+        if (error) state.error = error;
+        return { ok: false, text: raw, error };
+    }
+    if (state.organizing) {
+        return { ok: false, text: parsed.text, error: '' };
+    }
+    if (!state.selected) {
+        state.error = 'Select an icon first';
+        return { ok: false, text: parsed.text, error: 'Select an icon first' };
+    }
+    stopMove();
+    stopChangeIcon();
+    state.error = '';
+    try {
+        await upsertCot({
+            id: crypto.randomUUID(),
+            lng: parsed.lng,
+            lat: parsed.lat,
+            enumerate: state.enumerate,
+        });
+        panToIfNeeded(parsed.lng, parsed.lat);
+        return { ok: true, text: '', error: '' };
+    } catch (err) {
+        const error = err instanceof Error ? err.message : String(err);
+        state.error = error;
+        return { ok: false, text: parsed.text, error };
+    }
 }
 
 async function beginEdit(uid: string): Promise<void> {

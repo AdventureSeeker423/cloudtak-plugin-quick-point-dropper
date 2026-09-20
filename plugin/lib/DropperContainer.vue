@@ -233,7 +233,7 @@
         </div>
         <div
             v-show='!state.organizing'
-            class='mb-3'
+            class='mb-2'
         >
             <label class='form-label small mb-1'>Notes / Remarks</label>
             <textarea
@@ -241,6 +241,36 @@
                 class='form-control form-control-sm'
                 rows='2'
             />
+        </div>
+        <div
+            v-show='!state.organizing'
+            class='mb-3'
+        >
+            <label class='form-label small mb-1'>Coordinates</label>
+            <div class='input-group input-group-sm'>
+                <input
+                    v-model='coordText'
+                    class='form-control'
+                    type='text'
+                    placeholder='30.385744, -102.418914 or MGRS'
+                    title='Decimal degrees, DMS, DDM, NMEA, MGRS/USNG, or UTM'
+                    aria-label='Coordinates'
+                    @paste='onCoordPaste'
+                    @keydown.enter.prevent='onCoordEnter'
+                >
+                <button
+                    type='button'
+                    class='btn btn-outline-secondary'
+                    :disabled='!coordText'
+                    title='Clear coordinates'
+                    aria-label='Clear coordinates'
+                    @click='coordText = ""'
+                >
+                    <IconX
+                        :size='16'
+                    />
+                </button>
+            </div>
         </div>
 
         <div
@@ -382,7 +412,9 @@ import {
     setEnumerateNext,
     resetEnumerate,
     enumeratedCallsign,
+    dropAtCoords,
 } from './dropper.ts';
+import { parseLatLng } from './coords.ts';
 
 defineProps<{
     api?: unknown;
@@ -399,6 +431,25 @@ const titlePreview = computed(() => {
 });
 const confirmDelete = ref(false);
 const titleInput = ref<HTMLInputElement | null>(null);
+const coordText = ref('');
+
+async function submitCoords(raw: string): Promise<void> {
+    const result = await dropAtCoords(raw);
+    coordText.value = result.text;
+}
+
+function onCoordPaste(ev: ClipboardEvent): void {
+    const text = ev.clipboardData?.getData('text') ?? '';
+    const parsed = parseLatLng(text);
+    ev.preventDefault();
+    if (!parsed) return;
+    coordText.value = parsed.text;
+    void submitCoords(parsed.text);
+}
+
+function onCoordEnter(): void {
+    void submitCoords(coordText.value);
+}
 
 watch(titleInput, (el) => {
     bindTitleInput(el);
