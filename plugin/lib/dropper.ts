@@ -243,6 +243,20 @@ let packBeforeEdit = FAVORITES_PACK;
 
 export function setEditTab(tab: 'add' | 'arrange'): void {
     state.editTab = tab;
+    if (tab === 'arrange' && state.selectedPack === FAVORITES_PACK) {
+        void refreshFavoriteIcons();
+    }
+}
+
+async function refreshFavoriteIcons(): Promise<void> {
+    try {
+        const icons = await iconsForFavorites();
+        if (state.organizing && state.editTab === 'arrange') {
+            state.icons = icons;
+        }
+    } catch (err) {
+        state.error = err instanceof Error ? err.message : String(err);
+    }
 }
 
 export function setOrganizing(value: boolean): void {
@@ -1276,42 +1290,38 @@ async function iconsForPack(uid: string, bucket: string[] = thumbUrls): Promise<
     }));
 }
 
+async function displayFavorite(fav: FavoriteIcon): Promise<DisplayIcon> {
+    if (fav.iconset === STANDARD_PACK) {
+        const std = standardIcons().find((i) => i.path === fav.path);
+        if (std) {
+            return { ...std, name: fav.name || std.name, sectionId: fav.sectionId };
+        }
+    }
+    let icon = await displayFromDexie(fav.iconset, fav.path);
+    if (!icon) {
+        try {
+            await Icon.addIconset(fav.iconset);
+            icon = await displayFromDexie(fav.iconset, fav.path);
+        } catch { /* missing pack */ }
+    }
+    if (icon) {
+        return { ...icon, name: fav.name || icon.name, sectionId: fav.sectionId };
+    }
+    return {
+        iconset: fav.iconset,
+        path: fav.path,
+        name: fav.name || iconName(fav.path),
+        key: iconKey(fav.iconset, fav.path),
+        url: '',
+        sectionId: fav.sectionId,
+    };
+}
+
 async function iconsForFavorites(): Promise<DisplayIcon[]> {
     revokeThumbs();
     const out: DisplayIcon[] = [];
     for (const fav of state.favorites) {
-        if (fav.iconset === STANDARD_PACK) {
-            const std = standardIcons().find((i) => i.path === fav.path);
-            if (std) {
-                out.push({
-                    ...std,
-                    name: fav.name || std.name,
-                    sectionId: fav.sectionId,
-                });
-            }
-            continue;
-        }
-        let icon = await displayFromDexie(fav.iconset, fav.path);
-        if (!icon) {
-            try {
-                await Icon.addIconset(fav.iconset);
-                icon = await displayFromDexie(fav.iconset, fav.path);
-            } catch { /* missing pack */ }
-        }
-        if (icon) {
-            icon.name = fav.name || icon.name;
-            icon.sectionId = fav.sectionId;
-            out.push(icon);
-        } else {
-            out.push({
-                iconset: fav.iconset,
-                path: fav.path,
-                name: fav.name || iconName(fav.path),
-                key: iconKey(fav.iconset, fav.path),
-                url: '',
-                sectionId: fav.sectionId,
-            });
-        }
+        out.push(await displayFavorite(fav));
     }
     return out;
 }
@@ -1395,7 +1405,13 @@ export async function toggleFavorite(icon: DisplayIcon): Promise<void> {
         if (state.selectedPack === FAVORITES_PACK) {
             const already = state.icons.some((i) => i.iconset === icon.iconset && i.path === icon.path);
             if (!already) {
-                state.icons = [...state.icons, { ...icon, sectionId: null }];
+                const display = await displayFavorite(entry);
+                if (
+                    isFavorite(icon)
+                    && !state.icons.some((i) => i.iconset === icon.iconset && i.path === icon.path)
+                ) {
+                    state.icons = [...state.icons, display];
+                }
             }
         }
     }
