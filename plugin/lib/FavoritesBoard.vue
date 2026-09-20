@@ -37,6 +37,9 @@
             <template v-if='state.query.trim()'>
                 No icons match that search.
             </template>
+            <template v-else-if='!state.favoritesReady'>
+                Waiting for the server after an update.
+            </template>
             <template v-else>
                 No favorite icons yet.
                 <span v-if='state.writable'>Use Edit Favorites to add icons.</span>

@@ -88,6 +88,7 @@ export const state = reactive({
     libraryIcons: [] as DisplayIcon[],
     icons: [] as DisplayIcon[],
     favorites: [] as FavoriteIcon[],
+    favoritesReady: false,
     sections: [] as FavoriteSection[],
     selected: null as DisplayIcon | null,
     editing: null as EditingPoint | null,
@@ -1453,39 +1454,124 @@ export async function toggleFavorite(icon: DisplayIcon): Promise<void> {
     }
 }
 
+let loadGen = 0;
+
+function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function errorText(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
+function isAbortError(err: unknown): boolean {
+    return (err instanceof DOMException && err.name === 'AbortError')
+        || errorText(err) === 'cancelled';
+}
+
+function isTransientApiError(err: unknown): boolean {
+    if (isAbortError(err)) return false;
+    const msg = errorText(err);
+    const lower = msg.toLowerCase();
+    return /\b50[234]\b/.test(msg)
+        || lower.includes('bad gateway')
+        || lower.includes('service unavailable')
+        || lower.includes('gateway timeout')
+        || lower.includes('failed to fetch')
+        || lower.includes('networkerror')
+        || lower.includes('not valid json')
+        || (lower.includes('unexpected token') && msg.includes('<'));
+}
+
+function friendlyApiError(err: unknown): string {
+    if (isTransientApiError(err)) {
+        return 'The server is still restarting after an update. Favorites will retry automatically.';
+    }
+    return errorText(err);
+}
+
+async function retryTransient<T>(run: () => Promise<T>, attempts = 8): Promise<T> {
+    let last: unknown;
+    for (let i = 0; i < attempts; i++) {
+        try {
+            return await run();
+        } catch (err) {
+            last = err;
+            if (!isTransientApiError(err) || i === attempts - 1) throw err;
+            await sleep(Math.min(500 * (2 ** i), 4000));
+        }
+    }
+    throw last;
+}
+
+async function fetchStartup(): Promise<{ packs: { uid: string; name: string }[]; favs: Awaited<ReturnType<typeof listFavorites>> }> {
+    const [packs, favs] = await Promise.all([
+        IconsetManager.list(),
+        listFavorites(),
+    ]);
+    return { packs, favs };
+}
+
+async function applyStartup(
+    packs: { uid: string; name: string }[],
+    favs: Awaited<ReturnType<typeof listFavorites>>,
+): Promise<void> {
+    const firstPaint = !state.favoritesReady;
+    state.packs = packs.map((p) => ({ uid: p.uid, name: p.name }));
+    state.favorites = favs.favorites;
+    state.sections = favs.sections;
+    state.writable = favs.writable;
+    state.favoritesReady = true;
+    state.error = '';
+    if (!state.writable) state.organizing = false;
+
+    if (!firstPaint) {
+        if (state.selectedPack === FAVORITES_PACK) {
+            await selectPack(FAVORITES_PACK, { remember: false });
+        }
+        return;
+    }
+
+    const last = loadLastPack();
+    const packExists = last === FAVORITES_PACK
+        || last === STANDARD_PACK
+        || state.packs.some((p) => p.uid === last);
+    await selectPack(packExists ? last : FAVORITES_PACK);
+}
+
+async function keepRetryingLoad(gen: number): Promise<void> {
+    while (gen === loadGen && api) {
+        await sleep(4000);
+        if (gen !== loadGen || !api) return;
+        try {
+            const { packs, favs } = await fetchStartup();
+            if (gen !== loadGen || !api) return;
+            await applyStartup(packs, favs);
+            return;
+        } catch (err) {
+            if (!isTransientApiError(err)) return;
+        }
+    }
+}
+
 async function load(): Promise<void> {
+    const gen = ++loadGen;
     state.loading = true;
     state.error = '';
     try {
-        const [packs, favs] = await Promise.all([
-            IconsetManager.list(),
-            listFavorites().catch((err) => {
-                console.warn('QPD: failed to load favorites', err);
-                state.error = err instanceof Error ? err.message : 'Could not load favorites';
-                return {
-                    favorites: state.favorites,
-                    sections: state.sections,
-                    writable: state.writable,
-                };
-            }),
-        ]);
-        if (!api) return;
-
-        state.packs = packs.map((p) => ({ uid: p.uid, name: p.name }));
-        state.favorites = favs.favorites;
-        state.sections = favs.sections;
-        state.writable = favs.writable;
-        if (!state.writable) state.organizing = false;
-
-        const last = loadLastPack();
-        const packExists = last === FAVORITES_PACK
-            || last === STANDARD_PACK
-            || state.packs.some((p) => p.uid === last);
-        await selectPack(packExists ? last : FAVORITES_PACK);
+        const { packs, favs } = await retryTransient(async () => {
+            if (gen !== loadGen) throw new DOMException('cancelled', 'AbortError');
+            return fetchStartup();
+        });
+        if (gen !== loadGen || !api) return;
+        await applyStartup(packs, favs);
     } catch (err) {
-        state.error = err instanceof Error ? err.message : String(err);
+        if (gen !== loadGen || isAbortError(err)) return;
+        console.warn('QPD: failed to load favorites', err);
+        state.error = friendlyApiError(err);
+        void keepRetryingLoad(gen);
     } finally {
-        state.loading = false;
+        if (gen === loadGen) state.loading = false;
     }
 }
 
@@ -1531,6 +1617,7 @@ export function init(pluginAPI: PluginAPI): void {
 }
 
 export function destroy(): void {
+    loadGen += 1;
     clearSaveTimer();
     stopDrop();
     stopMove();
