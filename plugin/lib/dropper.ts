@@ -12,6 +12,7 @@ import Icon from '../../../src/base/icon.ts';
 import {
     STANDARD_PACK,
     standardIcons,
+    defaultFavorites,
     matchStandardType,
 } from './standard-icons.ts';
 import { parseLatLng, formatLatLng, isCoordMode, type CoordMode } from './coords.ts';
@@ -320,17 +321,21 @@ export function showSectionSelect(): boolean {
 }
 
 export function favoriteGroups(): FavoriteGroup[] {
+    const iconByFav = new Map(state.icons.map((i) => [iconFavKey(i), i]));
+    const knownSections = new Set(state.sections.map((s) => s.id));
     const bySection = new Map<string, DisplayIcon[]>();
     const unsorted: DisplayIcon[] = [];
     const searching = !!state.query.trim();
-    for (const icon of state.icons) {
+    for (const fav of state.favorites) {
+        const icon = iconFromFavorite(fav, iconByFav.get(favKey(fav.iconset, fav.path)));
         if (!iconMatchesQuery(icon)) continue;
-        if (icon.sectionId) {
-            const list = bySection.get(icon.sectionId) || [];
-            list.push(icon);
-            bySection.set(icon.sectionId, list);
+        const sectionId = icon.sectionId && knownSections.has(icon.sectionId) ? icon.sectionId : null;
+        if (sectionId) {
+            const list = bySection.get(sectionId) || [];
+            list.push({ ...icon, sectionId });
+            bySection.set(sectionId, list);
         } else {
-            unsorted.push(icon);
+            unsorted.push({ ...icon, sectionId: null });
         }
     }
 
@@ -360,6 +365,24 @@ function favKey(iconset: string, path: string): string {
 
 function iconFavKey(icon: { iconset: string; path: string }): string {
     return favKey(icon.iconset, icon.path);
+}
+
+function iconFromFavorite(fav: FavoriteIcon, existing?: DisplayIcon): DisplayIcon {
+    if (existing) {
+        return {
+            ...existing,
+            name: fav.name || existing.name,
+            sectionId: fav.sectionId,
+        };
+    }
+    return {
+        iconset: fav.iconset,
+        path: fav.path,
+        name: fav.name || iconName(fav.path),
+        key: `${fav.iconset}:${fav.path}`,
+        url: '',
+        sectionId: fav.sectionId,
+    };
 }
 
 function syncIconsFromFavorites(): void {
@@ -1351,7 +1374,7 @@ export async function selectPack(uid: string, opts?: { remember?: boolean }): Pr
             : ALL_FOLDERS;
     } catch (err) {
         state.error = err instanceof Error ? err.message : String(err);
-        state.icons = [];
+        if (uid !== FAVORITES_PACK) state.icons = [];
     } finally {
         state.loading = false;
     }
@@ -1431,24 +1454,46 @@ export async function toggleFavorite(icon: DisplayIcon): Promise<void> {
     }
 }
 
+async function persistSeededFavorites(): Promise<void> {
+    const toSeed = state.favorites.slice();
+    for (const fav of toSeed) {
+        try {
+            await addFavorite(fav);
+        } catch (err) {
+            console.warn('QPD: failed to seed favorite', fav.path, err);
+        }
+    }
+}
+
 async function load(): Promise<void> {
     state.loading = true;
     state.error = '';
     try {
+        let favoritesLoaded = false;
         const [packs, favs] = await Promise.all([
             IconsetManager.list(),
-            listFavorites().catch((err) => {
+            listFavorites().then((r) => {
+                favoritesLoaded = true;
+                return r;
+            }).catch((err) => {
                 console.warn('QPD: failed to load favorites', err);
-                return { favorites: [] as FavoriteIcon[], sections: [] as FavoriteSection[], writable: false };
+                state.error = err instanceof Error ? err.message : 'Could not load favorites';
+                return {
+                    favorites: state.favorites,
+                    sections: state.sections,
+                    writable: state.writable,
+                };
             }),
         ]);
         if (!api) return;
 
         state.packs = packs.map((p) => ({ uid: p.uid, name: p.name }));
-        state.favorites = favs.favorites;
+        const empty = !favs.favorites.length;
+        state.favorites = empty ? defaultFavorites() : favs.favorites;
         state.sections = favs.sections;
         state.writable = favs.writable;
         if (!state.writable) state.organizing = false;
+        if (empty && favoritesLoaded && state.writable) void persistSeededFavorites();
 
         const last = loadLastPack();
         const packExists = last === FAVORITES_PACK

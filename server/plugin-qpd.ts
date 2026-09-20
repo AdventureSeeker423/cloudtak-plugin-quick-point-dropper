@@ -74,10 +74,33 @@ function mapFavorite(row: FavoriteRow): {
     };
 }
 
+const DEFAULT_FAVORITES = [
+    { iconset: '__standard__', path: 'unknown', name: 'Unknown Point' },
+    { iconset: '__standard__', path: 'friendly', name: 'Friendly Point' },
+    { iconset: '__standard__', path: 'hostile', name: 'Hostile Point' },
+    { iconset: '__standard__', path: 'neutral', name: 'Neutral Point' },
+] as const;
+
+async function seedDefaultFavorites(config: ConfigStateless): Promise<void> {
+    const existing = await query<{ iconset: string }>(config, sql`
+        SELECT iconset FROM qpd_favorites LIMIT 1
+    `);
+    if (existing.length) return;
+    for (let i = 0; i < DEFAULT_FAVORITES.length; i++) {
+        const icon = DEFAULT_FAVORITES[i];
+        await config.pg.execute(sql`
+            INSERT INTO qpd_favorites (iconset, path, name, created_by, section_id, sort)
+            VALUES (${icon.iconset}, ${icon.path}, ${icon.name}, NULL, NULL, ${i})
+            ON CONFLICT (iconset, path) DO NOTHING
+        `);
+    }
+}
+
 async function readLayout(config: ConfigStateless): Promise<{
     sections: ReturnType<typeof mapSection>[];
     favorites: ReturnType<typeof mapFavorite>[];
 }> {
+    await seedDefaultFavorites(config);
     const sections = await query<SectionRow>(config, sql`
         SELECT id, name, sort FROM qpd_sections
         ORDER BY sort ASC, name ASC
@@ -131,6 +154,7 @@ async function bootstrap(config: ConfigStateless): Promise<void> {
           AND f.path = numbered.path
           AND NOT EXISTS (SELECT 1 FROM qpd_favorites x WHERE x.sort <> 0)
     `);
+    await seedDefaultFavorites(config);
 }
 
 export default async function router(schema: Schema, config: ConfigStateless) {
