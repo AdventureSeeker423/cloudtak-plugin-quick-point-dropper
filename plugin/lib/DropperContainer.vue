@@ -247,18 +247,36 @@
             class='mb-3'
         >
             <label class='form-label small mb-1'>Coordinates</label>
-            <div class='input-group input-group-sm'>
+            <div
+                class='input-group input-group-sm'
+                :title='coordHint'
+            >
+                <button
+                    class='btn btn-outline-secondary'
+                    type='button'
+                    :disabled='!coordEditable'
+                    :title='coordEditable ? "Paste" : coordHint'
+                    aria-label='Paste coordinates'
+                    @click='onCoordPasteClick'
+                >
+                    <IconClipboard
+                        :size='16'
+                    />
+                </button>
                 <input
                     v-model='coordText'
                     class='form-control'
                     type='text'
-                    placeholder='30.385744, -102.418914 or MGRS'
-                    title='Decimal degrees, DMS, DDM, NMEA, MGRS/USNG, or UTM'
+                    :readonly='!coordEditable'
+                    placeholder='DD, DM, DMS, MGRS, or UTM'
+                    :title='coordHint'
                     aria-label='Coordinates'
+                    @input='coordUserEdit = true'
                     @paste='onCoordPaste'
                     @keydown.enter.prevent='onCoordEnter'
                 >
                 <button
+                    v-if='coordEditable && state.dropping'
                     type='button'
                     class='btn btn-outline-secondary'
                     :disabled='!coordText'
@@ -382,6 +400,7 @@ import {
     IconReplace,
     IconX,
     IconRotate,
+    IconClipboard,
 } from '@tabler/icons-vue';
 import FavoritesBoard from './FavoritesBoard.vue';
 import FavoritesEditor from './FavoritesEditor.vue';
@@ -412,9 +431,9 @@ import {
     setEnumerateNext,
     resetEnumerate,
     enumeratedCallsign,
-    dropAtCoords,
+    applyCoords,
+    formatCoords,
 } from './dropper.ts';
-import { parseLatLng } from './coords.ts';
 
 defineProps<{
     api?: unknown;
@@ -432,22 +451,53 @@ const titlePreview = computed(() => {
 const confirmDelete = ref(false);
 const titleInput = ref<HTMLInputElement | null>(null);
 const coordText = ref('');
+const coordUserEdit = ref(false);
+
+const coordEditable = computed(() => (
+    !state.organizing && (state.dropping || (state.moving && !!state.editing))
+));
+
+const coordHint = computed(() => {
+    if (coordEditable.value) return 'DD, DM, DMS, MGRS, or UTM';
+    if (state.editing) return 'Click Move to edit these coordinates';
+    return 'Select an icon first to enter coordinates';
+});
 
 async function submitCoords(raw: string): Promise<void> {
-    const result = await dropAtCoords(raw);
+    if (!coordEditable.value) return;
+    const result = await applyCoords(raw);
     coordText.value = result.text;
+    if (result.ok) coordUserEdit.value = false;
+}
+
+async function pasteCoords(text: string): Promise<void> {
+    const value = text.trim();
+    if (!value) return;
+    coordUserEdit.value = true;
+    coordText.value = value;
+    await submitCoords(value);
 }
 
 function onCoordPaste(ev: ClipboardEvent): void {
-    const text = ev.clipboardData?.getData('text') ?? '';
-    const parsed = parseLatLng(text);
+    if (!coordEditable.value) {
+        ev.preventDefault();
+        return;
+    }
     ev.preventDefault();
-    if (!parsed) return;
-    coordText.value = parsed.text;
-    void submitCoords(parsed.text);
+    void pasteCoords(ev.clipboardData?.getData('text') ?? '');
+}
+
+async function onCoordPasteClick(): Promise<void> {
+    if (!coordEditable.value) return;
+    try {
+        await pasteCoords(await navigator.clipboard.readText());
+    } catch {
+        state.error = 'Could not read the clipboard';
+    }
 }
 
 function onCoordEnter(): void {
+    if (!coordEditable.value) return;
     void submitCoords(coordText.value);
 }
 
@@ -462,6 +512,37 @@ onBeforeUnmount(() => {
 watch(() => state.editing?.id, () => {
     confirmDelete.value = false;
 });
+
+watch(() => state.dropping, (dropping) => {
+    if (!dropping) return;
+    coordUserEdit.value = false;
+    coordText.value = '';
+});
+
+watch(() => state.moving, (moving) => {
+    if (!moving || !state.editing) return;
+    coordUserEdit.value = false;
+    coordText.value = formatCoords(state.editing.lat, state.editing.lng);
+});
+
+watch(
+    () => [
+        state.editing?.id,
+        state.editing?.lat,
+        state.editing?.lng,
+        state.coordFormat,
+        state.dropping,
+        state.moving,
+    ] as const,
+    () => {
+        if (state.dropping) return;
+        if (coordUserEdit.value && coordEditable.value) return;
+        coordText.value = state.editing
+            ? formatCoords(state.editing.lat, state.editing.lng)
+            : '';
+    },
+    { immediate: true },
+);
 
 function onMoveClick(): void {
     confirmDelete.value = false;

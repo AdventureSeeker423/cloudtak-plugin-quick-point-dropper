@@ -14,7 +14,7 @@ import {
     standardIcons,
     matchStandardType,
 } from './standard-icons.ts';
-import { parseLatLng } from './coords.ts';
+import { parseLatLng, formatLatLng, isCoordMode, type CoordMode } from './coords.ts';
 import {
     listFavorites,
     addFavorite,
@@ -95,6 +95,7 @@ export const state = reactive({
     changingIcon: false,
     enumerate: false,
     enumerateNext: 1,
+    coordFormat: 'dd' as CoordMode,
 });
 
 function loadDetailed(): boolean {
@@ -797,6 +798,7 @@ type MapStoreUi = {
         cot?: { id?: string; properties?: { id?: string } };
     };
     select: { feats: unknown[] };
+    coordFormat?: string;
 };
 
 function bindMapStoreWatch(): void {
@@ -804,9 +806,11 @@ function bindMapStoreWatch(): void {
     stopMapStoreWatch = undefined;
     if (!api) return;
     const mapStore = useMapStore(api.pinia) as MapStoreUi;
+    if (isCoordMode(mapStore.coordFormat)) state.coordFormat = mapStore.coordFormat;
     stopMapStoreWatch = watch(
-        () => [mapStore.radial.mode, mapStore.select.feats?.length ?? 0] as const,
-        ([mode, featCount]) => {
+        () => [mapStore.radial.mode, mapStore.select.feats?.length ?? 0, mapStore.coordFormat] as const,
+        ([mode, featCount, coordFormat]) => {
+            if (isCoordMode(coordFormat)) state.coordFormat = coordFormat;
             if (!pluginRouteActive() || state.organizing) return;
             if (dropCursorActive()) {
                 if (mode) clearRadial();
@@ -1071,25 +1075,37 @@ function panToIfNeeded(lng: number, lat: number): void {
     } catch { /* map not ready */ }
 }
 
-/** Drop the selected icon at coordinates found in `raw`. Non-coordinate text is ignored. */
-export async function dropAtCoords(raw: string): Promise<{ ok: boolean; text: string; error: string }> {
+export function formatCoords(lat: number, lng: number): string {
+    return formatLatLng(lat, lng, state.coordFormat);
+}
+
+/** Drop or move using coordinates in CloudTAK's DD / DM / DMS / MGRS / UTM formats. */
+export async function applyCoords(raw: string): Promise<{ ok: boolean; text: string; error: string }> {
+    const canDrop = state.dropping && !!state.selected;
+    const canMove = state.moving && !!state.editing;
+    if (state.organizing || (!canDrop && !canMove)) {
+        return { ok: false, text: raw, error: '' };
+    }
+
     const parsed = parseLatLng(raw);
     if (!parsed) {
         const error = raw.trim() ? 'No coordinates found' : '';
         if (error) state.error = error;
         return { ok: false, text: raw, error };
     }
-    if (state.organizing) {
-        return { ok: false, text: parsed.text, error: '' };
-    }
-    if (!state.selected) {
-        state.error = 'Select an icon first';
-        return { ok: false, text: parsed.text, error: 'Select an icon first' };
-    }
-    stopMove();
-    stopChangeIcon();
+
+    const formatted = formatCoords(parsed.lat, parsed.lng);
     state.error = '';
+
     try {
+        if (canMove && state.editing) {
+            state.editing.lng = parsed.lng;
+            state.editing.lat = parsed.lat;
+            await upsertCot({ ...state.editing });
+            panToIfNeeded(parsed.lng, parsed.lat);
+            return { ok: true, text: formatted, error: '' };
+        }
+
         await upsertCot({
             id: crypto.randomUUID(),
             lng: parsed.lng,
@@ -1101,7 +1117,7 @@ export async function dropAtCoords(raw: string): Promise<{ ok: boolean; text: st
     } catch (err) {
         const error = err instanceof Error ? err.message : String(err);
         state.error = error;
-        return { ok: false, text: parsed.text, error };
+        return { ok: false, text: formatted, error };
     }
 }
 
