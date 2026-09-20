@@ -611,6 +611,7 @@ function restorePreEdit(): void {
 export async function cancelEdit(): Promise<void> {
     if (!state.editing) return;
     stopMove();
+    stopChangeIcon();
     clearSaveTimer();
     try {
         await persistEdit();
@@ -618,6 +619,7 @@ export async function cancelEdit(): Promise<void> {
         state.error = err instanceof Error ? err.message : String(err);
     }
     state.editing = null;
+    state.selected = null;
     restorePreEdit();
 }
 
