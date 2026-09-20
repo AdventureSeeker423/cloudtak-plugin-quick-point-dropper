@@ -16,14 +16,20 @@ function svgUrl(svg: string): string {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
-/** Yellow quatrefoil (unknown). */
+/** Yellow quatrefoil (unknown). Fill is drawn over the strokes so only the outer outline shows. */
 const UNKNOWN_SVG = svgUrl(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">
-  <g fill="#FFE14D" stroke="#1a1a1a" stroke-width="1.4">
-    <circle cx="20" cy="12" r="8.2"/>
-    <circle cx="20" cy="28" r="8.2"/>
-    <circle cx="12" cy="20" r="8.2"/>
-    <circle cx="28" cy="20" r="8.2"/>
+  <g fill="#FFFF00" stroke="#1a1a1a" stroke-width="2">
+    <circle cx="20" cy="12" r="8.5"/>
+    <circle cx="20" cy="28" r="8.5"/>
+    <circle cx="12" cy="20" r="8.5"/>
+    <circle cx="28" cy="20" r="8.5"/>
+  </g>
+  <g fill="#FFFF00">
+    <circle cx="20" cy="12" r="8.5"/>
+    <circle cx="20" cy="28" r="8.5"/>
+    <circle cx="12" cy="20" r="8.5"/>
+    <circle cx="28" cy="20" r="8.5"/>
   </g>
 </svg>
 `);
