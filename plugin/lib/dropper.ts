@@ -1103,6 +1103,7 @@ export async function applyCoords(raw: string): Promise<{ ok: boolean; text: str
             state.editing.lat = parsed.lat;
             await upsertCot({ ...state.editing });
             panToIfNeeded(parsed.lng, parsed.lat);
+            stopMove();
             return { ok: true, text: formatted, error: '' };
         }
 
