@@ -4,20 +4,18 @@
         :title='state.moving ? "Cancel move" : "Stop dropping points"'
         @click='onClick'
     >
-        <img
-            :src='PinUrl'
-            width='28'
-            height='28'
+        <IconPin
+            :size='28'
             style='opacity: 0.95;'
-        >
-        <span class='small text-white ps-1 text-nowrap'>
+        />
+        <span class='small ps-1 text-nowrap'>
             {{ state.moving ? 'Cancel' : 'Stop Dropping Points' }}
         </span>
     </div>
 </template>
 
 <script setup lang='ts'>
-import PinUrl from './Pin.svg';
+import { IconPin } from './icon.ts';
 import {
     state,
     stopDrop,

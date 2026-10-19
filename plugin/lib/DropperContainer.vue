@@ -51,7 +51,7 @@
                 Click the map to move this point
             </span>
             <button
-                class='btn btn-sm btn-dark'
+                class='btn btn-sm btn-outline-secondary'
                 type='button'
                 @click='stopMove'
             >
@@ -68,7 +68,7 @@
                 Tap an icon to change this point
             </span>
             <button
-                class='btn btn-sm btn-dark'
+                class='btn btn-sm btn-outline-secondary'
                 type='button'
                 @click='stopChangeIcon'
             >
@@ -735,12 +735,12 @@ function onFolderChange(ev: Event): void {
 }
 .qpd-icon:hover,
 .qpd-list-item:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--tblr-body-color, currentColor) 6%, transparent);
 }
 .qpd-icon.qpd-icon-selected,
 .qpd-list-item.qpd-icon-selected {
     border-color: var(--tblr-primary, #206bc4);
-    background: rgba(32, 107, 196, 0.18);
+    background: color-mix(in srgb, var(--tblr-primary, #206bc4) 18%, transparent);
 }
 .qpd-icon-thumb {
     position: relative;
@@ -761,10 +761,10 @@ function onFolderChange(ev: Event): void {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--tblr-body-color, currentColor) 8%, transparent);
     border-radius: 4px;
     font-size: 14px;
-    color: #adb5bd;
+    color: var(--tblr-secondary, #667382);
 }
 .qpd-star {
     position: absolute;
@@ -776,12 +776,13 @@ function onFolderChange(ev: Event): void {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.65);
-    color: #adb5bd;
+    background: var(--cloudtak-panel-bg, var(--cloudtak-surface-bg, var(--tblr-bg-surface, #fff)));
+    border: 1px solid var(--cloudtak-surface-border, var(--tblr-border-color, rgba(128, 128, 128, 0.3)));
+    color: var(--tblr-secondary, #667382);
 }
 .qpd-star:hover,
 .qpd-star-on {
-    color: #ffd43b;
+    color: var(--tblr-yellow, #f59f00);
 }
 .qpd-list-label {
     flex: 1;

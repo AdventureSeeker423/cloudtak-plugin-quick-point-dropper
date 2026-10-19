@@ -186,16 +186,16 @@ function onLibraryFolderChange(ev: Event): void {
     padding: 6px 8px;
     border: 1px solid transparent;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.03);
+    background: color-mix(in srgb, var(--tblr-body-color, currentColor) 3%, transparent);
     color: inherit;
     cursor: pointer;
 }
 .qpd-add-row:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--tblr-body-color, currentColor) 8%, transparent);
 }
 .qpd-add-on {
     border-color: var(--tblr-primary, #206bc4);
-    background: rgba(32, 107, 196, 0.16);
+    background: color-mix(in srgb, var(--tblr-primary, #206bc4) 16%, transparent);
 }
 .qpd-add-badge {
     flex-shrink: 0;
@@ -203,10 +203,10 @@ function onLibraryFolderChange(ev: Event): void {
     font-weight: 650;
     letter-spacing: 0.03em;
     text-transform: uppercase;
-    color: var(--tblr-secondary, #adb5bd);
+    color: var(--tblr-secondary, #667382);
 }
 .qpd-add-on .qpd-add-badge {
-    color: var(--tblr-primary, #74b0ff);
+    color: var(--tblr-primary, #206bc4);
 }
 .qpd-icon-thumb {
     position: relative;
@@ -228,10 +228,10 @@ function onLibraryFolderChange(ev: Event): void {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--tblr-body-color, currentColor) 8%, transparent);
     border-radius: 4px;
     font-size: 14px;
-    color: #adb5bd;
+    color: var(--tblr-secondary, #667382);
 }
 .qpd-list-label {
     flex: 1;

@@ -1,11 +1,12 @@
 import type { App } from 'vue';
 import { h, markRaw } from 'vue';
 import type { PluginAPI, PluginInstance } from '@tak-ps/cloudtak';
-import MenuTemplate from './lib/MenuTemplate.vue';
+// Host component (plugin is built inside api/web/plugins/, same as dropper.ts host imports).
+import MenuTemplate from '../../src/components/CloudTAK/util/MenuTemplate.vue';
 import DropperContainer from './lib/DropperContainer.vue';
 import DropperBottomBar from './lib/DropperBottomBar.vue';
 import ClearSelectionButton from './lib/ClearSelectionButton.vue';
-import IconPinUrl from './lib/Pin.svg';
+import { IconPin } from './lib/icon.ts';
 import {
     ROUTE_NAME,
     MENU_KEY,
@@ -14,14 +15,6 @@ import {
     destroy,
     setDroppingListener,
 } from './lib/dropper.ts';
-
-const IconPin = {
-    render: () => h('img', {
-        src: IconPinUrl,
-        width: 32,
-        height: 32
-    })
-};
 
 export default class QuickPointDropper implements PluginInstance {
     api: PluginAPI;

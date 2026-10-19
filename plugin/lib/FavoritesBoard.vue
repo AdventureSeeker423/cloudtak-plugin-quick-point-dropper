@@ -466,13 +466,13 @@ function onSectionDrop(group: FavoriteGroup): void {
 .qpd-section-card {
     margin-bottom: 10px;
     padding: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--cloudtak-surface-border, var(--tblr-border-color, rgba(128, 128, 128, 0.3)));
     border-radius: 8px;
-    background: rgba(0, 0, 0, 0.18);
+    background: color-mix(in srgb, var(--tblr-body-color, currentColor) 4%, transparent);
 }
 .qpd-section-over {
     outline: 2px dashed var(--tblr-primary, #206bc4);
-    background: rgba(32, 107, 196, 0.12);
+    background: color-mix(in srgb, var(--tblr-primary, #206bc4) 12%, transparent);
 }
 .qpd-section-head {
     display: flex;
@@ -480,7 +480,7 @@ function onSectionDrop(group: FavoriteGroup): void {
     gap: 2px;
     margin-bottom: 8px;
     padding-bottom: 6px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid var(--cloudtak-surface-border, var(--tblr-border-color, rgba(128, 128, 128, 0.25)));
 }
 .qpd-section-title,
 .qpd-section-title-btn {
@@ -488,7 +488,7 @@ function onSectionDrop(group: FavoriteGroup): void {
     font-weight: 650;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: var(--tblr-secondary, #adb5bd);
+    color: var(--tblr-secondary, #667382);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -504,7 +504,7 @@ function onSectionDrop(group: FavoriteGroup): void {
     cursor: text;
 }
 .qpd-section-title-btn:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--tblr-body-color, currentColor) 6%, transparent);
     color: inherit;
 }
 .qpd-section-collapsed .qpd-section-head {
@@ -523,11 +523,11 @@ function onSectionDrop(group: FavoriteGroup): void {
     flex: 1;
 }
 .qpd-empty-drop {
-    color: #6c7a89;
+    color: var(--tblr-secondary, #667382);
     font-size: 12px;
     text-align: center;
     padding: 14px 8px;
-    border: 1px dashed rgba(255, 255, 255, 0.18);
+    border: 1px dashed var(--cloudtak-surface-border, var(--tblr-border-color, rgba(128, 128, 128, 0.35)));
     border-radius: 6px;
 }
 .qpd-grid {
@@ -564,7 +564,7 @@ function onSectionDrop(group: FavoriteGroup): void {
     justify-content: center;
     width: 22px;
     padding: 0;
-    color: #6c7a89;
+    color: var(--tblr-secondary, #667382);
     pointer-events: none;
 }
 .qpd-fav-tools {
@@ -611,12 +611,12 @@ function onSectionDrop(group: FavoriteGroup): void {
 }
 .qpd-icon:hover,
 .qpd-list-item:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: color-mix(in srgb, var(--tblr-body-color, currentColor) 6%, transparent);
 }
 .qpd-icon.qpd-icon-selected,
 .qpd-list-item.qpd-icon-selected {
     border-color: var(--tblr-primary, #206bc4);
-    background: rgba(32, 107, 196, 0.18);
+    background: color-mix(in srgb, var(--tblr-primary, #206bc4) 18%, transparent);
 }
 .qpd-icon-thumb {
     position: relative;
@@ -638,10 +638,10 @@ function onSectionDrop(group: FavoriteGroup): void {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
+    background: color-mix(in srgb, var(--tblr-body-color, currentColor) 8%, transparent);
     border-radius: 4px;
     font-size: 14px;
-    color: #adb5bd;
+    color: var(--tblr-secondary, #667382);
 }
 .qpd-star {
     position: absolute;
@@ -653,12 +653,13 @@ function onSectionDrop(group: FavoriteGroup): void {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.65);
-    color: #adb5bd;
+    background: var(--cloudtak-panel-bg, var(--cloudtak-surface-bg, var(--tblr-bg-surface, #fff)));
+    border: 1px solid var(--cloudtak-surface-border, var(--tblr-border-color, rgba(128, 128, 128, 0.3)));
+    color: var(--tblr-secondary, #667382);
 }
 .qpd-star:hover,
 .qpd-star-on {
-    color: #ffd43b;
+    color: var(--tblr-yellow, #f59f00);
 }
 .qpd-list-label {
     flex: 1;
