@@ -20,7 +20,7 @@ Requires CloudTAK **13.45** or newer.
 Do not use CloudTAK’s `WEB_PLUGINS` setting. Use this installer:
 
 ```bash
-git clone https://github.com/AdventureSeeker423/cloudtak-plugin-quick-point-dropper.git
+git clone https://github.com/ValleyTacticalSolutions/cloudtak-plugin-quick-point-dropper.git
 cd cloudtak-plugin-quick-point-dropper
 ./install.sh
 ```
